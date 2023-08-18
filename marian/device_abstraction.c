@@ -9,6 +9,8 @@ void clear_device_specifics(struct device_specifics *dev_specifics)
 		return;
 	dev_specifics->hw_revision_valid = NULL;
 	dev_specifics->get_hw_revision_range = NULL;
+	dev_specifics->card_name = NULL;
+	dev_specifics->chip_new = NULL;
 }
 
 bool verify_device_specifics(struct device_specifics *dev_specifics)
@@ -18,6 +20,10 @@ bool verify_device_specifics(struct device_specifics *dev_specifics)
 	if (dev_specifics->hw_revision_valid == NULL)
 		return false;
 	if (dev_specifics->get_hw_revision_range == NULL)
+		return false;
+	if (dev_specifics->card_name == NULL)
+		return false;
+	if (dev_specifics->chip_new == NULL)
 		return false;
 	return true;
 }

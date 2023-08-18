@@ -22,49 +22,90 @@ static unsigned dev_idx = 0;
 
 static struct device_specifics dev_specifics[SNDRV_CARDS] = { 0, };
 
-int driver_probe(struct pci_dev *dev, struct pci_device_id const *id)
+static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci_id)
 {
+	struct snd_card *card = NULL;
+	struct generic_chip *chip = NULL;
 	int err = 0;
 
-	snd_printk(KERN_DEBUG "MARIAN driver probe: Device id: 0x%4x, revision: %02d\n", id->device, dev->revision);
+	if (dev_idx >= SNDRV_CARDS) {
+		return -ENODEV;
+	}
 
-	// cleanly initialize all specific function pointers
+	if (!enable[dev_idx]) {
+		dev_idx++;
+		return -ENOENT;
+	}
+
+	snd_printk(KERN_DEBUG "MARIAN driver probe: Device id: 0x%4x, revision: %02d\n",
+		pci_id->device, pci_dev->revision);
+
+	// cleanly initialize all specific function and descriptor pointers
 	clear_device_specifics(&dev_specifics[dev_idx]);
 
-	switch (id->device) {
+	switch (pci_id->device) {
 	case CLARA_E_DEVICE_ID:
 		clara_e_register_device_specifics(&dev_specifics[dev_idx]);
-		// TODO ToG: register ALSA card
-		// TODO ToG: register ALSA PCM device
 		break;
 
 	default:
-		err = -ENODEV;
-		break;
+		return -ENODEV;
 	}
 
 	if (!verify_device_specifics(&dev_specifics[dev_idx])) {
 		snd_printk(KERN_ERR "MARIAN driver probe: device specific descriptor not fully defined\n");
-		err = -EFAULT;
+		return -EFAULT;
 	}
 
-	if (!dev_specifics[dev_idx].hw_revision_valid(dev->revision)) {
+	if (!dev_specifics[dev_idx].hw_revision_valid(pci_dev->revision)) {
 		struct valid_hw_revision_range range;
 		dev_specifics[dev_idx].get_hw_revision_range(&range);
 		snd_printk(KERN_ERR "MARIAN driver probe: device revision not supported\n");
 		snd_printk(KERN_ERR "                     supported revisions: %02d - %02d\n", range.min, range.max);
-		err = -ENODEV;
+		return -ENODEV;
 	}
 
-	if (0 == err)
-		dev_idx++;
+	snd_printk(KERN_INFO "MARIAN driver probe: Initialized module for %s\n",
+		dev_specifics[dev_idx].card_name);
 
+
+	err = snd_card_new(&pci_dev->dev, index[dev_idx], id[dev_idx],
+		THIS_MODULE, 0, &card);
+	if (err < 0)
+		return err;
+
+	/* Setup General datastructures */
+	strcpy(card->driver, MARIAN_DRIVER_NAME);
+	strcpy(card->shortname, dev_specifics[dev_idx].card_name);
+	sprintf(card->longname, "%s %s", card->driver, card->shortname);
+
+	// create the chip instance
+	err = dev_specifics[dev_idx].chip_new(card, pci_dev, &chip);
+	if (err < 0)
+		goto error;
+
+	// register as ALSA device
+	err = snd_card_register(card);
+	if (err < 0)
+		goto error;
+
+	// driver_remove() needs access to the card to free resources
+	pci_set_drvdata(pci_dev, card);
+	snd_card_set_dev(card, &pci_dev->dev);
+
+	dev_idx++;
+	return 0;
+
+error:
+	snd_card_free(card);
 	return err;
 };
 
-void driver_remove(struct pci_dev *dev)
+static void driver_remove(struct pci_dev *pci)
 {
-	snd_printk(KERN_DEBUG "MARIAN driver remove: Device id: 0x%4x, revision: %02d\n", dev->device, dev->revision);
+	snd_printk(KERN_DEBUG "MARIAN driver remove: Device id: 0x%4x, revision: %02d\n", pci->device, pci->revision);
+	snd_card_free(pci_get_drvdata(pci));
+	pci_set_drvdata(pci, NULL);
 };
 
 static struct pci_device_id pci_ids[] = {

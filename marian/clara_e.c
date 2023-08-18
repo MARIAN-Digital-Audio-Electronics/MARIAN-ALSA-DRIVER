@@ -2,6 +2,7 @@
 
 #include <linux/types.h>
 #include "device_abstraction.h"
+#include "device_generic.h"
 #include "clara_e.h"
 
 static bool clara_e_hw_revision_valid(u8 rev)
@@ -28,4 +29,6 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 		return;
 	dev_specifics->hw_revision_valid = clara_e_hw_revision_valid;
 	dev_specifics->get_hw_revision_range = clara_e_get_hw_revision_range;
+	dev_specifics->card_name = CLARA_E_CARD_NAME;
+	dev_specifics->chip_new = generic_chip_new;
 }
