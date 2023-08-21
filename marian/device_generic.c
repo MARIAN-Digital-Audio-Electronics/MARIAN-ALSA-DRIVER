@@ -4,10 +4,17 @@
 #include <sound/core.h>
 #include "device_generic.h"
 
-static int generic_chip_dev_free(struct snd_device *device)
+#define ADDR_STATUS_REG 0x00
+#define ADDR_LED_REG 0xF4
+
+static int acquire_pci_resources(struct generic_chip *chip);
+static void release_pci_resources(struct generic_chip *chip);
+
+int generic_chip_dev_free(struct snd_device *device)
 {
 	struct generic_chip *chip = device->device_data;
-	return generic_chip_free(chip);
+	generic_chip_free(chip);
+	return 0;
 }
 
 int generic_chip_new(struct snd_card *card,
@@ -16,9 +23,6 @@ int generic_chip_new(struct snd_card *card,
 {
 	int err = 0;
 	struct generic_chip *chip = NULL;
-	static const struct snd_device_ops ops = {
-		.dev_free = generic_chip_dev_free,
-	};
 
 	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 	if (chip == NULL)
@@ -32,39 +36,34 @@ int generic_chip_new(struct snd_card *card,
 	chip->specific = NULL;
 	chip->specific_free = NULL;
 
-	err = generic_acquire_pci_resources(chip);
+	err = acquire_pci_resources(chip);
 	if (err < 0)
 		goto error;
-
-	snd_device_new(card, SNDRV_DEV_LOWLEVEL, chip, &ops);
 
 	*rchip = chip;
 	snd_printk(KERN_DEBUG "generic_chip_new: success\n");
 	return 0;
 
 error:
+	// we might have partially acquired PCI resources
+	release_pci_resources(chip);
 	kfree(chip);
 	return err;
 };
 
-int generic_chip_free(struct generic_chip *chip)
+void generic_chip_free(struct generic_chip *chip)
 {
-	int err	= 0;
 	if (chip == NULL)
-		return -EINVAL;
-	if (chip->specific_free != NULL)
-		err = chip->specific_free(chip->specific);
-	if (err < 0)
-		return err;
-	err = generic_release_pci_resources(chip);
-	if (err < 0)
-		return err;
+		return;
+	if (chip->specific_free != NULL) {
+		chip->specific_free(chip);
+	}
+	release_pci_resources(chip);
 	kfree(chip);
-	snd_printk(KERN_DEBUG "generic_chip_free\n");
-	return 0;
+	snd_printk(KERN_DEBUG "chip_free\n");
 }
 
-int generic_acquire_pci_resources(struct generic_chip *chip)
+static int acquire_pci_resources(struct generic_chip *chip)
 {
 	int err = 0;
 	if (chip == NULL)
@@ -84,23 +83,23 @@ int generic_acquire_pci_resources(struct generic_chip *chip)
 	chip->bar0 =
 		ioremap(chip->bar0_addr, pci_resource_len(chip->pci_dev, 0));
 	if (chip->bar0 == NULL) {
-		snd_printk(KERN_ERR "ioremap error\n");
+		snd_printk(KERN_ERR "BAR0: ioremap error\n");
 		return -ENXIO;
 	}
 
-	generic_indicate_status(chip, STATUS_SUCCESS);
+	generic_indicate_state(chip, STATUS_SUCCESS);
 
-	snd_printk(KERN_DEBUG "generic_acquire_pci_resources\n");
+	snd_printk(KERN_DEBUG "acquire_pci_resources\n");
 	return 0;
 }
 
-int generic_release_pci_resources(struct generic_chip *chip)
+static void release_pci_resources(struct generic_chip *chip)
 {
 	if (chip == NULL)
-		return -EINVAL;
+		return;
 
 	if (chip->bar0 != NULL) {
-		generic_indicate_status(chip, STATUS_RESET);
+		generic_indicate_state(chip, STATUS_RESET);
 		iounmap(chip->bar0);
 		chip->bar0 = NULL;
 	}
@@ -112,16 +111,11 @@ int generic_release_pci_resources(struct generic_chip *chip)
 
 	pci_disable_device(chip->pci_dev);
 
-	snd_printk(KERN_DEBUG "generic_release_pci_resources\n");
-	return 0;
+	snd_printk(KERN_DEBUG "release_pci_resources\n");
 }
 
-void generic_indicate_status(struct generic_chip *chip,
-	enum status_indicator status)
+void generic_indicate_state(struct generic_chip *chip,
+	enum status_indicator state)
 {
-	if (chip == NULL)
-		return;
-	if (chip->bar0 == NULL)
-		return;
-	iowrite32(status, chip->bar0 + 0xF4);
+	write_reg32_bar0(chip, ADDR_LED_REG, state);
 }

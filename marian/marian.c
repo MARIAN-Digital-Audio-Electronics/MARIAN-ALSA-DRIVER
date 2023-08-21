@@ -26,6 +26,9 @@ static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci
 {
 	struct snd_card *card = NULL;
 	struct generic_chip *chip = NULL;
+	static const struct snd_device_ops ops = {
+		.dev_free = generic_chip_dev_free,
+	};
 	int err = 0;
 
 	if (dev_idx >= SNDRV_CARDS) {
@@ -37,7 +40,7 @@ static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci
 		return -ENOENT;
 	}
 
-	snd_printk(KERN_DEBUG "MARIAN driver probe: Device id: 0x%4x, revision: %02d\n",
+	snd_printk(KERN_INFO "MARIAN driver probe: Device id: 0x%4x, revision: %02d\n",
 		pci_id->device, pci_dev->revision);
 
 	// cleanly initialize all specific function and descriptor pointers
@@ -60,14 +63,12 @@ static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci
 	if (!dev_specifics[dev_idx].hw_revision_valid(pci_dev->revision)) {
 		struct valid_hw_revision_range range;
 		dev_specifics[dev_idx].get_hw_revision_range(&range);
-		snd_printk(KERN_ERR "MARIAN driver probe: device revision not supported\n");
-		snd_printk(KERN_ERR "                     supported revisions: %02d - %02d\n", range.min, range.max);
+		snd_printk(KERN_ERR
+			"MARIAN driver probe: device revision not supported.\n\t"
+			"supported revisions: %02d - %02d\n",
+			range.min, range.max);
 		return -ENODEV;
 	}
-
-	snd_printk(KERN_INFO "MARIAN driver probe: Initialized module for %s\n",
-		dev_specifics[dev_idx].card_name);
-
 
 	err = snd_card_new(&pci_dev->dev, index[dev_idx], id[dev_idx],
 		THIS_MODULE, 0, &card);
@@ -84,6 +85,16 @@ static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci
 	if (err < 0)
 		goto error;
 
+	if (!dev_specifics[dev_idx].detect_hw_presence(chip)) {
+		snd_printk(KERN_ERR "MARIAN driver probe: device not present\n");
+		err = -ENODEV;
+		goto error;
+	}
+
+	err = snd_device_new(card, SNDRV_DEV_LOWLEVEL, chip, &ops);
+	if (err < 0)
+		goto error;
+
 	// register as ALSA device
 	err = snd_card_register(card);
 	if (err < 0)
@@ -93,17 +104,20 @@ static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci
 	pci_set_drvdata(pci_dev, card);
 	snd_card_set_dev(card, &pci_dev->dev);
 
+	snd_printk(KERN_INFO "MARIAN driver probe: Initialized module for %s\n",
+		dev_specifics[dev_idx].card_name);
 	dev_idx++;
 	return 0;
 
 error:
+	generic_chip_free(chip);
 	snd_card_free(card);
 	return err;
 };
 
 static void driver_remove(struct pci_dev *pci)
 {
-	snd_printk(KERN_DEBUG "MARIAN driver remove: Device id: 0x%4x, revision: %02d\n", pci->device, pci->revision);
+	snd_printk(KERN_INFO "MARIAN driver remove: Device id: 0x%4x, revision: %02d\n", pci->device, pci->revision);
 	snd_card_free(pci_get_drvdata(pci));
 	pci_set_drvdata(pci, NULL);
 };

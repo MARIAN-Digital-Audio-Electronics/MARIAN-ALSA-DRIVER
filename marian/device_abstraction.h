@@ -20,6 +20,7 @@ typedef void (*get_hw_revision_range_func)(struct valid_hw_revision_range *range
 typedef int (*chip_new_func)(struct snd_card *card,
 	struct pci_dev *pci_dev,
 	struct generic_chip **rchip);
+typedef bool (*detect_hw_presence_func)(struct generic_chip *chip);
 
 /* This structure holds the device specific functions
 	and descriptors that can only be determined at runtime.
@@ -32,6 +33,11 @@ struct device_specifics {
 	get_hw_revision_range_func get_hw_revision_range;
 	char *card_name;
 	chip_new_func chip_new;
+	// always use the generic chip_free function to make sure
+	// all resources are freed correctly unless you REALLY
+	// know what you're doing!
+	chip_free_func chip_free;
+	detect_hw_presence_func detect_hw_presence;
 };
 
 void clear_device_specifics(struct device_specifics *dev_specifics);
