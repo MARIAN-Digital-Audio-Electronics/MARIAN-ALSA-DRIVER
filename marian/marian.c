@@ -56,7 +56,8 @@ static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci
 	}
 
 	if (!verify_device_specifics(&dev_specifics[dev_idx])) {
-		snd_printk(KERN_ERR "MARIAN driver probe: device specific descriptor not fully defined\n");
+		snd_printk(KERN_ERR "MARIAN driver probe: device specific "
+			"descriptor not fully defined\n");
 		return -EFAULT;
 	}
 
@@ -91,6 +92,19 @@ static int driver_probe(struct pci_dev *pci_dev, struct pci_device_id const *pci
 		goto error;
 	}
 
+	// prevent something funny happens when the irq handler is attached
+	dev_specifics[dev_idx].soft_reset(chip);
+
+	if (request_irq
+		(chip->pci_dev->irq, dev_specifics[dev_idx].irq_handler,
+		IRQF_SHARED, "MARIAN PCIe", chip) < 0) {
+		snd_printk(KERN_ERR "request_irq error: %d\n", chip->pci_dev->irq);
+		err = -ENXIO;
+		goto error;
+	}
+	chip->irq = chip->pci_dev->irq;
+	snd_printk(KERN_DEBUG "MARIAN driver probe: IRQ: %d\n", chip->irq);
+
 	err = snd_device_new(card, SNDRV_DEV_LOWLEVEL, chip, &ops);
 	if (err < 0)
 		goto error;
@@ -117,7 +131,9 @@ error:
 
 static void driver_remove(struct pci_dev *pci)
 {
-	snd_printk(KERN_INFO "MARIAN driver remove: Device id: 0x%4x, revision: %02d\n", pci->device, pci->revision);
+	snd_printk(KERN_INFO
+		"MARIAN driver remove: Device id: 0x%4x, revision: %02d\n",
+		pci->device, pci->revision);
 	snd_card_free(pci_get_drvdata(pci));
 	pci_set_drvdata(pci, NULL);
 };

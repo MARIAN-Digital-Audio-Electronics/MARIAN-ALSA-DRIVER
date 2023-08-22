@@ -110,3 +110,8 @@ bool clara_detect_hw_presence(struct generic_chip *chip)
 
 	return false;
 }
+
+void clara_soft_reset(struct generic_chip *chip)
+{
+	// TODO ToG: reset IRQs / DMA engine
+}

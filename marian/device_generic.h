@@ -18,13 +18,6 @@ int generic_chip_dev_free(struct snd_device *device);
 typedef void (*chip_free_func)(struct generic_chip *chip);
 // this needs to be public in case we need to rollback in driver_probe()
 void generic_chip_free(struct generic_chip *chip);
-
-enum status_indicator {
-	STATUS_SUCCESS = 1,
-	STATUS_FAILURE = 2,
-	STATUS_RESET = 3,
-};
-
 struct generic_chip {
 	struct snd_card *card;
 	struct pci_dev *pci_dev;
@@ -39,7 +32,14 @@ int generic_chip_new(struct snd_card *card,
 	struct pci_dev *pci_dev,
 	struct generic_chip **rchip);
 
+enum status_indicator {
+	STATUS_SUCCESS = 1,
+	STATUS_FAILURE = 2,
+	STATUS_RESET = 3,
+};
 void generic_indicate_state(struct generic_chip *chip,
 	enum status_indicator state);
+
+irqreturn_t generic_irq_handler(int irq, void *dev_id);
 
 #endif

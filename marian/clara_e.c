@@ -81,4 +81,6 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->chip_new = chip_new;
 	dev_specifics->chip_free = generic_chip_free;
 	dev_specifics->detect_hw_presence = clara_detect_hw_presence;
+	dev_specifics->soft_reset = clara_soft_reset;
+	dev_specifics->irq_handler = generic_irq_handler;
 }

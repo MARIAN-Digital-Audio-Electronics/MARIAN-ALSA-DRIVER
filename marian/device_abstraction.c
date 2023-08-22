@@ -13,6 +13,8 @@ void clear_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->chip_new = NULL;
 	dev_specifics->chip_free = NULL;
 	dev_specifics->detect_hw_presence = NULL;
+	dev_specifics->soft_reset = NULL;
+	dev_specifics->irq_handler = NULL;
 }
 
 bool verify_device_specifics(struct device_specifics *dev_specifics)
@@ -30,6 +32,10 @@ bool verify_device_specifics(struct device_specifics *dev_specifics)
 	if (dev_specifics->chip_free == NULL)
 		return false;
 	if (dev_specifics->detect_hw_presence == NULL)
+		return false;
+	if (dev_specifics->soft_reset == NULL)
+		return false;
+	if (dev_specifics->irq_handler == NULL)
 		return false;
 	return true;
 }

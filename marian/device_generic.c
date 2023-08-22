@@ -58,6 +58,11 @@ void generic_chip_free(struct generic_chip *chip)
 	if (chip->specific_free != NULL) {
 		chip->specific_free(chip);
 	}
+	if (chip->irq) {
+		free_irq(chip->irq, chip);
+		chip->irq = -1;
+		snd_printk(KERN_DEBUG "free_irq\n");
+	}
 	release_pci_resources(chip);
 	kfree(chip);
 	snd_printk(KERN_DEBUG "chip_free\n");
@@ -118,4 +123,14 @@ void generic_indicate_state(struct generic_chip *chip,
 	enum status_indicator state)
 {
 	write_reg32_bar0(chip, ADDR_LED_REG, state);
+}
+
+irqreturn_t generic_irq_handler(int irq, void *dev_id)
+{
+	struct generic_chip *chip = dev_id;
+	u32 val = read_reg32_bar0(chip, ADDR_STATUS_REG);
+	if (val == 0)
+		return IRQ_NONE;
+
+	return IRQ_HANDLED;
 }

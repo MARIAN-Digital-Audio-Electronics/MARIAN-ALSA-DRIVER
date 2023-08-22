@@ -18,5 +18,7 @@ struct clara_chip {
 int clara_chip_new(struct snd_card *card,
 	struct pci_dev *pci_dev,
 	struct generic_chip **rchip);
-
 bool clara_detect_hw_presence(struct generic_chip *chip);
+/* Resets all relevant registers to default values mainly
+ * to avoid spurious interrupts. */
+void clara_soft_reset(struct generic_chip *chip);
