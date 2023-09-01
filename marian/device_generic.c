@@ -4,8 +4,10 @@
 #include <sound/core.h>
 #include "device_generic.h"
 
-#define ADDR_STATUS_REG 0x00
+#define ADDR_IRQ_STATUS_REG 0x00
 #define ADDR_LED_REG 0xF4
+#define ADDR_SAMPLE_COUNTER_REG 0x8C
+#define ADDR_BUILD_NO_REG 0xFC
 
 static int acquire_pci_resources(struct generic_chip *chip);
 static void release_pci_resources(struct generic_chip *chip);
@@ -13,7 +15,9 @@ static void release_pci_resources(struct generic_chip *chip);
 int generic_chip_dev_free(struct snd_device *device)
 {
 	struct generic_chip *chip = device->device_data;
+	snd_device_free(chip->card, device);
 	generic_chip_free(chip);
+	device->device_data = NULL;
 	return 0;
 }
 
@@ -33,6 +37,12 @@ int generic_chip_new(struct snd_card *card,
 	chip->bar0_addr = 0;
 	chip->bar0 = NULL;
 	chip->irq = -1;
+	chip->pcm = NULL;
+	chip->playback_substream = NULL;
+	chip->capture_substream = NULL;
+	chip->dma_status = DMA_STATUS_UNKNOWN;
+	memset(&chip->playback_buf, 0, sizeof(chip->playback_buf));
+	memset(&chip->capture_buf, 0, sizeof(chip->capture_buf));
 	chip->specific = NULL;
 	chip->specific_free = NULL;
 
@@ -55,14 +65,15 @@ void generic_chip_free(struct generic_chip *chip)
 {
 	if (chip == NULL)
 		return;
-	if (chip->specific_free != NULL) {
+	if (chip->specific_free != NULL)
 		chip->specific_free(chip);
-	}
 	if (chip->irq) {
 		free_irq(chip->irq, chip);
 		chip->irq = -1;
 		snd_printk(KERN_DEBUG "free_irq\n");
 	}
+	snd_dma_free_pages(&chip->playback_buf);
+	snd_dma_free_pages(&chip->capture_buf);
 	release_pci_resources(chip);
 	kfree(chip);
 	snd_printk(KERN_DEBUG "chip_free\n");
@@ -78,7 +89,20 @@ static int acquire_pci_resources(struct generic_chip *chip)
 	if (err < 0)
 		return err;
 
+//	if (!dma_set_mask(&chip->pci_dev->dev, DMA_BIT_MASK(64))) {
+//		dma_set_coherent_mask(&chip->pci_dev->dev, DMA_BIT_MASK(64));
+//	}
+//	else if (!dma_set_mask(&chip->pci_dev->dev, DMA_BIT_MASK(32))) {
+//		dma_set_coherent_mask(&chip->pci_dev->dev, DMA_BIT_MASK(32));
+//	}
+//	else {
+//		snd_printk(KERN_ERR "No suitable DMA possible.\n");
+//		return -EINVAL;
+//	}
+	
 	pci_set_master(chip->pci_dev);
+	
+	pci_disable_msi(chip->pci_dev);
 
 	err = pci_request_regions(chip->pci_dev, chip->card->driver);
 	if (err < 0)
@@ -92,7 +116,7 @@ static int acquire_pci_resources(struct generic_chip *chip)
 		return -ENXIO;
 	}
 
-	generic_indicate_state(chip, STATUS_SUCCESS);
+	generic_indicate_state(chip, STATE_SUCCESS);
 
 	snd_printk(KERN_DEBUG "acquire_pci_resources\n");
 	return 0;
@@ -103,8 +127,10 @@ static void release_pci_resources(struct generic_chip *chip)
 	if (chip == NULL)
 		return;
 
+	pci_clear_master(chip->pci_dev);
+	
 	if (chip->bar0 != NULL) {
-		generic_indicate_state(chip, STATUS_RESET);
+		generic_indicate_state(chip, STATE_RESET);
 		iounmap(chip->bar0);
 		chip->bar0 = NULL;
 	}
@@ -120,17 +146,22 @@ static void release_pci_resources(struct generic_chip *chip)
 }
 
 void generic_indicate_state(struct generic_chip *chip,
-	enum status_indicator state)
+	enum state_indicator state)
 {
 	write_reg32_bar0(chip, ADDR_LED_REG, state);
 }
 
-irqreturn_t generic_irq_handler(int irq, void *dev_id)
+u32 generic_get_sample_counter(struct generic_chip *chip)
 {
-	struct generic_chip *chip = dev_id;
-	u32 val = read_reg32_bar0(chip, ADDR_STATUS_REG);
-	if (val == 0)
-		return IRQ_NONE;
+	return read_reg32_bar0(chip, ADDR_SAMPLE_COUNTER_REG);
+}
 
-	return IRQ_HANDLED;
+u32 generic_get_irq_status(struct generic_chip *chip)
+{
+	return read_reg32_bar0(chip, ADDR_IRQ_STATUS_REG);
+}
+
+u32 generic_get_build_no(struct generic_chip *chip)
+{
+	return read_reg32_bar0(chip, ADDR_BUILD_NO_REG);
 }

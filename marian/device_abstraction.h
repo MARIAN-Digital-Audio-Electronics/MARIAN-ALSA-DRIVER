@@ -5,7 +5,9 @@
 
 #include <linux/types.h>
 #include <linux/pci.h>
+#include <linux/interrupt.h>
 #include <sound/core.h>
+#include <sound/pcm.h>
 #include "device_generic.h"
 
 
@@ -22,7 +24,6 @@ typedef int (*chip_new_func)(struct snd_card *card,
 	struct generic_chip **rchip);
 typedef bool (*detect_hw_presence_func)(struct generic_chip *chip);
 typedef void (*soft_reset_func)(struct generic_chip *chip);
-typedef irqreturn_t (*irq_handler_func)(int irq, void *dev_id);
 
 /* This structure holds the device specific functions
 	and descriptors that can only be determined at runtime.
@@ -41,7 +42,9 @@ struct device_specifics {
 	chip_free_func chip_free;
 	detect_hw_presence_func detect_hw_presence;
 	soft_reset_func soft_reset;
-	irq_handler_func irq_handler;
+	irq_handler_t irq_handler;
+	struct snd_pcm_ops const *pcm_playback_ops;
+	struct snd_pcm_ops const *pcm_capture_ops;
 };
 
 void clear_device_specifics(struct device_specifics *dev_specifics);

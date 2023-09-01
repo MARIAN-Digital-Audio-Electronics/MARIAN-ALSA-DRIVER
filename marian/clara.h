@@ -2,6 +2,7 @@
 
 #include <linux/pci.h>
 #include <sound/core.h>
+#include "device_generic.h"
 
 struct clara_chip {
 	unsigned long bar1_addr;

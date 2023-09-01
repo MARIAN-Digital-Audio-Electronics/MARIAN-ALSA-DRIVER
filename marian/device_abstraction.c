@@ -15,6 +15,8 @@ void clear_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->detect_hw_presence = NULL;
 	dev_specifics->soft_reset = NULL;
 	dev_specifics->irq_handler = NULL;
+	dev_specifics->pcm_playback_ops = NULL;
+	dev_specifics->pcm_capture_ops = NULL;
 }
 
 bool verify_device_specifics(struct device_specifics *dev_specifics)
@@ -36,6 +38,10 @@ bool verify_device_specifics(struct device_specifics *dev_specifics)
 	if (dev_specifics->soft_reset == NULL)
 		return false;
 	if (dev_specifics->irq_handler == NULL)
+		return false;
+	if (dev_specifics->pcm_playback_ops == NULL)
+		return false;
+	if (dev_specifics->pcm_capture_ops == NULL)
 		return false;
 	return true;
 }

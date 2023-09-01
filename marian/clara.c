@@ -19,6 +19,8 @@ static void chip_free(struct generic_chip *chip)
 		clara_chip->specific_free(chip);
 	release_pci_resources(chip);
 	kfree(clara_chip);
+	chip->specific = NULL;
+	chip->specific_free = NULL;
 };
 
 int clara_chip_new(struct snd_card *card,
@@ -105,8 +107,11 @@ static void release_pci_resources(struct generic_chip *chip)
 bool clara_detect_hw_presence(struct generic_chip *chip)
 {
 	u32 val = read_reg32_bar0(chip, ADDR_MAGIC_WORD_REG);
-	if (val == FPGA_MAGIC_WORD)
+	if (val == FPGA_MAGIC_WORD) {
+		snd_printk(KERN_DEBUG "FPGA detected, build no: %08X\n",
+			generic_get_build_no(chip));
 		return true;
+	}
 
 	return false;
 }

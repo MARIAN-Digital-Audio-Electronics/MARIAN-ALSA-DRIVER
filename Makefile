@@ -1,5 +1,5 @@
 # TODO ToG: Add license header
-
+KERNEL_MODULE_NAME := marian/snd-marian
 
 ifneq ($(KERNELRELEASE),)
 obj-m := marian/
