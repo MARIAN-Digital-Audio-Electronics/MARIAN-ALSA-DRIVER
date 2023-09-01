@@ -1,0 +1,6 @@
+snd-marian/.vs/
+snd-marian/.visualgdb/
+.vscode/settings.json
+driver.code-workspace
+snd-marian/*.sln
+snd-marian/*.vkrnlproj
