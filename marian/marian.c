@@ -13,7 +13,7 @@
 
 MODULE_AUTHOR("Tobias Groß <theguy@audio-fpga.com>");
 MODULE_DESCRIPTION("ALSA driver for MARIAN PCIe soundcards");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Proprietary");
 
 __maybe_unused static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX;
 __maybe_unused static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;
@@ -130,7 +130,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 		// to the DMA implementation
 		struct snd_pcm *pcm;
 		struct snd_dma_buffer tmp_buf;
-		
+
 		if (snd_dma_alloc_dir_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
 				DMA_BIDIRECTIONAL, 16 * 4 * 512 * 128,
 				&tmp_buf) == 0) {
@@ -158,7 +158,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 			err = -ENOMEM;
 			goto error_free_card;
 		}
-		
+
 		err = snd_pcm_new(card, card->shortname, 0, 1, 1, &pcm);
 		if (err < 0)
 			goto error_free_card;
