@@ -43,6 +43,7 @@ int generic_chip_new(struct snd_card *card,
 	chip->dma_status = DMA_STATUS_UNKNOWN;
 	memset(&chip->playback_buf, 0, sizeof(chip->playback_buf));
 	memset(&chip->capture_buf, 0, sizeof(chip->capture_buf));
+	chip->num_buffer_frames = 0;
 	chip->specific = NULL;
 	chip->specific_free = NULL;
 
@@ -89,19 +90,17 @@ static int acquire_pci_resources(struct generic_chip *chip)
 	if (err < 0)
 		return err;
 
-//	if (!dma_set_mask(&chip->pci_dev->dev, DMA_BIT_MASK(64))) {
-//		dma_set_coherent_mask(&chip->pci_dev->dev, DMA_BIT_MASK(64));
-//	}
-//	else if (!dma_set_mask(&chip->pci_dev->dev, DMA_BIT_MASK(32))) {
-//		dma_set_coherent_mask(&chip->pci_dev->dev, DMA_BIT_MASK(32));
-//	}
-//	else {
-//		snd_printk(KERN_ERR "No suitable DMA possible.\n");
-//		return -EINVAL;
-//	}
-	
+	if (!dma_set_mask(&chip->pci_dev->dev, DMA_BIT_MASK(64))) {
+		dma_set_coherent_mask(&chip->pci_dev->dev, DMA_BIT_MASK(64));
+	}
+	else if (!dma_set_mask(&chip->pci_dev->dev, DMA_BIT_MASK(32))) {
+		dma_set_coherent_mask(&chip->pci_dev->dev, DMA_BIT_MASK(32));
+	}
+	else {
+		snd_printk(KERN_ERR "No suitable DMA possible.\n");
+		return -EINVAL;
+	}
 	pci_set_master(chip->pci_dev);
-	
 	pci_disable_msi(chip->pci_dev);
 
 	err = pci_request_regions(chip->pci_dev, chip->card->driver);
@@ -128,7 +127,7 @@ static void release_pci_resources(struct generic_chip *chip)
 		return;
 
 	pci_clear_master(chip->pci_dev);
-	
+
 	if (chip->bar0 != NULL) {
 		generic_indicate_state(chip, STATE_RESET);
 		iounmap(chip->bar0);

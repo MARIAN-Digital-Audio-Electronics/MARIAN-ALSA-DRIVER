@@ -13,7 +13,7 @@
 	ioread32((chip)->bar0 + (reg))
 #define HIGH_ADDR(x) (sizeof (x) > 4 ? (x) >> 32 & 0xffffffff : 0)
 #define LOW_ADDR(x) ((x) & 0xffffffff)
-	
+
 struct generic_chip;
 enum dma_status {
 	DMA_STATUS_UNKNOWN,
@@ -39,6 +39,7 @@ struct generic_chip {
 	enum dma_status dma_status;
 	struct snd_dma_buffer playback_buf;
 	struct snd_dma_buffer capture_buf;
+	unsigned int num_buffer_frames;
 	void *specific;
 	chip_free_func specific_free;
 };

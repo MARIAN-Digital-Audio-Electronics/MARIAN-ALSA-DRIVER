@@ -27,7 +27,7 @@
 #define ADDR_XILINX_C2H_REG 0x1004
 #define ADDR_XILINX_IRQ_ENABLE_REG 0x2004
 // to make things not too complicated, we fix the number of channels per slice
-#define CHANNELS_PER_SLICE 32
+#define CHANNELS_PER_SLICE 512
 
 int dma_enable_interrupts(struct generic_chip *chip)
 {
@@ -102,8 +102,8 @@ int dma_prepare(struct generic_chip *chip, unsigned int channels,
 //		return -EIO;
 
 	// TODO ToG: setup channel enables
-	write_reg32_bar0(chip , ADDR_BASE_PLAYBACK_CHANNELS_REGS, 0x3);
-	write_reg32_bar0(chip , ADDR_BASE_CAPTURE_CHANNELS_REGS, 0x3);
+	write_reg32_bar0(chip , ADDR_BASE_PLAYBACK_CHANNELS_REGS, 0xf);
+	write_reg32_bar0(chip , ADDR_BASE_CAPTURE_CHANNELS_REGS, 0xf);
 	// TODO ToG: setup blocks (before slices!)
 	write_reg32_bar0(chip, ADDR_NUM_BLOCKS_REG, num_blocks);
 	// TODO ToG: setup slice addresses

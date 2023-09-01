@@ -9,6 +9,12 @@
 #include "clara_e.h"
 #include "dma_ng.h"
 
+#define MIN_NUM_CHANNELS 1
+#define MAX_NUM_CHANNELS 2
+#define NUM_PERIODS 2
+#define MAX_NUM_BLOCKS 128
+#define DMA_BLOCK_SIZE_BYTES (16*sizeof(u32))
+
 struct clara_e_chip {
 	u32 _dummy;
 };
@@ -94,33 +100,24 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->pcm_capture_ops = &capture_ops;
 }
 
-#define MIN_NUM_CHANNELS 1
-#define MAX_NUM_CHANNELS 2
-#define NUM_PERIODS 2
-#define MAX_NUM_BLOCKS 128
-#define DMA_BLOCK_SIZE_BYTES (16*sizeof(u32))
 struct snd_pcm_hardware const hw_playback = {
 	.info = (SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_NONINTERLEAVED |
 		SNDRV_PCM_INFO_JOINT_DUPLEX | SNDRV_PCM_INFO_SYNC_START |
-		SNDRV_PCM_INFO_BLOCK_TRANSFER | SNDRV_PCM_INFO_MMAP_VALID),
+		SNDRV_PCM_INFO_BLOCK_TRANSFER),
 	.formats = SNDRV_PCM_FMTBIT_S32_LE,
 	.rates = (SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 |
 		SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000 |
 		SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_192000),
 	.rate_min = 44100,
 	.rate_max = 192000,
-//	.channels_min = 1,
-//	.channels_max = 512,
-//	.buffer_bytes_max = 16*4*128*512,
-//	.period_bytes_min = 16*4,//16*4*2,
-//	.period_bytes_max = 16*4*512*128,//1024*16*4*512,
 	.channels_min = MIN_NUM_CHANNELS,
 	.channels_max = MAX_NUM_CHANNELS,
 	.buffer_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * NUM_PERIODS * MAX_NUM_CHANNELS,
-	.period_bytes_min = DMA_BLOCK_SIZE_BYTES * MIN_NUM_CHANNELS, //16*4*2,
-	.period_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * MAX_NUM_CHANNELS, //1024*16*4*512,
+	.period_bytes_min = DMA_BLOCK_SIZE_BYTES * MIN_NUM_CHANNELS,
+	.period_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * MAX_NUM_CHANNELS,
 	.periods_min = NUM_PERIODS,
 	.periods_max = NUM_PERIODS,
+	.fifo_size = 0,
 };
 struct snd_pcm_hardware const hw_capture = hw_playback;
 
@@ -192,6 +189,8 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 		params_periods(hw_params));
 	printk(KERN_DEBUG "  channels    : %d\n",
 		params_channels(hw_params));
+
+	chip->num_buffer_frames = params_buffer_size(hw_params);
 	return 0;
 }
 
@@ -226,6 +225,35 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+static int channel_dma_offset(struct snd_pcm_substream *substream,
+				    struct snd_pcm_channel_info *info)
+{
+	struct generic_chip *chip = snd_pcm_substream_chip(substream);
+	unsigned int channel = info->channel;
+	int size = substream->runtime->buffer_size;
+
+	info->offset = 0;
+	info->first = channel * chip->num_buffer_frames * sizeof(u32) * 8;
+	info->step = 32;
+	snd_printk(KERN_DEBUG "channel_dma_offset: channel: %d, offset: %d\n",
+		channel, info->first/8);
+	return 0;
+}
+
+
+static int pcm_ioctl(struct snd_pcm_substream *substream,
+	unsigned int cmd, void *arg)
+{
+	switch (cmd) {
+	case SNDRV_PCM_IOCTL1_CHANNEL_INFO:
+		return channel_dma_offset(substream, arg);
+	default:
+		break;
+	}
+
+	return snd_pcm_lib_ioctl(substream, cmd, arg);
+}
+
 static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	switch (cmd) {
@@ -252,7 +280,7 @@ static snd_pcm_uframes_t pcm_pointer(struct snd_pcm_substream *substream)
 static struct snd_pcm_ops const playback_ops = {
 	.open = pcm_playback_open,
 	.close = pcm_playback_close,
-	.ioctl = snd_pcm_lib_ioctl,
+	.ioctl = pcm_ioctl,
 	.hw_params = pcm_hw_params,
 	.hw_free = pcm_hw_free,
 	.prepare = pcm_prepare,
@@ -263,7 +291,7 @@ static struct snd_pcm_ops const playback_ops = {
 static struct snd_pcm_ops const capture_ops = {
 	.open = pcm_capture_open,
 	.close = pcm_capture_close,
-	.ioctl = snd_pcm_lib_ioctl,
+	.ioctl = pcm_ioctl,
 	.hw_params = pcm_hw_params,
 	.hw_free = pcm_hw_free,
 	.prepare = pcm_prepare,
