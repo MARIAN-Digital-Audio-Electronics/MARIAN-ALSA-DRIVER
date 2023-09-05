@@ -44,6 +44,9 @@ int generic_chip_new(struct snd_card *card,
 	memset(&chip->playback_buf, 0, sizeof(chip->playback_buf));
 	memset(&chip->capture_buf, 0, sizeof(chip->capture_buf));
 	chip->num_buffer_frames = 0;
+	chip->timer_thread = NULL;
+	chip->timer_callback = NULL;
+	chip->timer_interval_ms = 0;
 	chip->specific = NULL;
 	chip->specific_free = NULL;
 

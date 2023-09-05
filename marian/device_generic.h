@@ -26,6 +26,7 @@ enum clock_mode {
 	CLOCK_MODE_96 = 1,
 	CLOCK_MODE_192 = 2,
 };
+typedef void (*timer_callback_func)(struct generic_chip *chip);
 
 // ALSA specific free operation
 int generic_chip_dev_free(struct snd_device *device);
@@ -45,6 +46,9 @@ struct generic_chip {
 	struct snd_dma_buffer playback_buf;
 	struct snd_dma_buffer capture_buf;
 	unsigned int num_buffer_frames;
+	struct task_struct *timer_thread;
+	timer_callback_func timer_callback;
+	unsigned long timer_interval_ms;
 	void *specific;
 	chip_free_func specific_free;
 };

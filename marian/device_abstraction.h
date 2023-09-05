@@ -45,6 +45,8 @@ struct device_specifics {
 	irq_handler_t irq_handler;
 	struct snd_pcm_ops const *pcm_playback_ops;
 	struct snd_pcm_ops const *pcm_capture_ops;
+	unsigned long timer_interval_ms;
+	timer_callback_func timer_callback;
 };
 
 void clear_device_specifics(struct device_specifics *dev_specifics);

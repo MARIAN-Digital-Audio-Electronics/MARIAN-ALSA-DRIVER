@@ -1,6 +1,7 @@
 // TODO ToG: Add license header
 
 #include <linux/types.h>
+#include <linux/delay.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include "device_abstraction.h"
@@ -14,12 +15,14 @@
 #define NUM_PERIODS 2
 #define MAX_NUM_BLOCKS 128
 #define DMA_BLOCK_SIZE_BYTES (16*sizeof(u32))
+#define TIMER_INTERVAL_MS 1000
 
 struct clara_e_chip {
 	u32 _dummy;
 };
 static struct snd_pcm_ops const playback_ops;
 static struct snd_pcm_ops const capture_ops;
+static void timer_callback(struct generic_chip *chip);
 
 static bool hw_revision_valid(u8 rev)
 {
@@ -98,6 +101,8 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->irq_handler = dma_irq_handler;
 	dev_specifics->pcm_playback_ops = &playback_ops;
 	dev_specifics->pcm_capture_ops = &capture_ops;
+	dev_specifics->timer_callback = timer_callback;
+	dev_specifics->timer_interval_ms = TIMER_INTERVAL_MS;
 }
 
 // capabilities are the same for playback and capture on Clara E
@@ -315,4 +320,10 @@ static struct snd_pcm_ops const capture_ops = {
 	.prepare = pcm_prepare,
 	.trigger = pcm_trigger,
 	.pointer = pcm_pointer,
+};
+
+static void timer_callback(struct generic_chip *chip)
+{
+	snd_printk(KERN_DEBUG "timer_callback\n");
+	msleep(200);
 };
