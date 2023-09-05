@@ -28,6 +28,7 @@
 #define ADDR_XILINX_IRQ_ENABLE_REG 0x2004
 // to make things not too complicated, we fix the number of channels per slice
 #define CHANNELS_PER_SLICE 512
+#define NUM_CHANNEL_ENABLE_REGS 16
 
 int dma_enable_interrupts(struct generic_chip *chip)
 {
@@ -87,6 +88,8 @@ int dma_reset_engine(struct generic_chip *chip)
 int dma_prepare(struct generic_chip *chip, unsigned int channels,
 	bool playback, u64 host_base_addr, unsigned int num_blocks)
 {
+
+	u32 channel_enables[NUM_CHANNEL_ENABLE_REGS] = {0};
 	// TODO ToG: this needs to go in the PCM setup section,
 	// not in the DMA setup section
 
@@ -101,12 +104,16 @@ int dma_prepare(struct generic_chip *chip, unsigned int channels,
 //	if (dma_reset_engine(chip) < 0)
 //		return -EIO;
 
-	// TODO ToG: setup channel enables
-	write_reg32_bar0(chip , ADDR_BASE_PLAYBACK_CHANNELS_REGS, 0xf);
-	write_reg32_bar0(chip , ADDR_BASE_CAPTURE_CHANNELS_REGS, 0xf);
-	// TODO ToG: setup blocks (before slices!)
+	for (int i = 0; i < channels; i++) {
+		channel_enables[i / 32] |= (1 << (i % 32));
+	}
+	for (int i = 0; i < NUM_CHANNEL_ENABLE_REGS; i++) {
+		write_reg32_bar0(chip, (playback ?
+			ADDR_BASE_PLAYBACK_CHANNELS_REGS :
+			ADDR_BASE_CAPTURE_CHANNELS_REGS) +
+			i * REG_ADDR_INCREASE, channel_enables[i]);
+	}
 	write_reg32_bar0(chip, ADDR_NUM_BLOCKS_REG, num_blocks);
-	// TODO ToG: setup slice addresses
 	write_reg32_bar0(chip, ADDR_NUM_SLICES_REG, CHANNELS_PER_SLICE);
 	if (playback) {
 		write_reg32_bar0(chip,
@@ -131,7 +138,8 @@ int dma_prepare(struct generic_chip *chip, unsigned int channels,
 
 int dma_start(struct generic_chip *chip)
 {
-	write_reg32_bar0(chip, ADDR_PREPARE_RUN_REG, MASK_ENGINE_PREPARE | MASK_ENGINE_RUN);
+	write_reg32_bar0(chip, ADDR_PREPARE_RUN_REG,
+		MASK_ENGINE_PREPARE | MASK_ENGINE_RUN);
 	chip->dma_status = DMA_STATUS_RUNNING;
 	return 0;
 }
@@ -146,11 +154,9 @@ int dma_stop(struct generic_chip *chip)
 irqreturn_t dma_irq_handler(int irq, void *dev_id)
 {
 	struct generic_chip *chip = dev_id;
-	static unsigned int count = 0;
 	u32 val = generic_get_irq_status(chip);
 	if (val == 0)
 		return IRQ_NONE;
-
 	if (val & MASK_IRQ_STATUS_PREPARED) {
 		snd_printk(KERN_DEBUG "dma_irq_handler: prepare IRQ\n");
 	}
@@ -164,7 +170,5 @@ irqreturn_t dma_irq_handler(int irq, void *dev_id)
 		dma_disable_interrupts(chip);
 		snd_printk(KERN_ERR "dma_irq_handler: caught dangling IRQ\n");
 	}
-
-	count++;
 	return IRQ_HANDLED;
 }
