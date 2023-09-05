@@ -46,7 +46,7 @@ static int timer_thread_func(void *data)
 		chip->timer_callback(chip);
 		end = jiffies;
 		msleep(max((signed long)(chip->timer_interval_ms) -
-			jiffies_to_msecs(end - start), 20));
+			jiffies_to_msecs(end - start), (signed long)20));
 	}
 	snd_printk(KERN_DEBUG "timer thread stopped\n");
 	return 0;
@@ -159,8 +159,8 @@ static int driver_probe(struct pci_dev *pci_dev,
 			DMA_BIDIRECTIONAL, 16 * 4 * 512 * 128,
 			&tmp_buf) == 0) {
 			snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
-			snd_printk(KERN_DEBUG "addr = 0x%p\n", tmp_buf.addr);
-			snd_printk(KERN_DEBUG "bytes = %d\n", tmp_buf.bytes);
+			snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
+			snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
 			chip->capture_buf = tmp_buf;
 		}
 		else {
@@ -172,8 +172,8 @@ static int driver_probe(struct pci_dev *pci_dev,
 		if (snd_dma_alloc_dir_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
 			DMA_BIDIRECTIONAL, 16 * 4 * 512 * 128, &tmp_buf) == 0) {
 			snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
-			snd_printk(KERN_DEBUG "addr = 0x%p\n", tmp_buf.addr);
-			snd_printk(KERN_DEBUG "bytes = %d\n", tmp_buf.bytes);
+			snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
+			snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
 			chip->playback_buf = tmp_buf;
 		}
 		else {
@@ -199,7 +199,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 	chip->timer_interval_ms = dev_specifics.timer_interval_ms;
 	chip->timer_callback = dev_specifics.timer_callback;
 	chip->timer_thread = kthread_run(timer_thread_func,
-		chip, "MARIAN_timer_thread");
+		(void *)chip, "MARIAN_timer_thread");
 	if (IS_ERR(chip->timer_thread)) {
 		snd_printk(KERN_ERR "could not create timer thread\n");
 		err = -ENOMEM;

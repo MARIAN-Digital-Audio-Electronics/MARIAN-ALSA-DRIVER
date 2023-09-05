@@ -149,14 +149,14 @@ static const struct snd_pcm_hw_constraint_list hw_constraints_period_sizes[] = {
 		.mask = 0},
 };
 
-static const u16 max_channels[CLOCK_MODE_192] = {512, 256, 128};
+static const u16 max_channels[] = {512, 256, 128};
 
 static int pcm_open(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	snd_printk(KERN_INFO "pcm_playback_open\n");
 	enum clock_mode cmode =
 		generic_sample_rate_to_clock_mode(substream->runtime->rate);
+	snd_printk(KERN_INFO "pcm_playback_open\n");
 	snd_pcm_set_sync(substream);
 	snd_pcm_hw_constraint_list(substream->runtime, 0,
 		SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
@@ -196,7 +196,6 @@ static int pcm_capture_close(struct snd_pcm_substream *substream)
 static int pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *hw_params)
 {
-	int err = 0;
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 
 	snd_printk(KERN_DEBUG "pcm_hw_params\n");
@@ -253,8 +252,6 @@ static int channel_dma_offset(struct snd_pcm_substream *substream,
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	unsigned int channel = info->channel;
-	int size = substream->runtime->buffer_size;
-
 	info->offset = 0;
 	info->first = channel * chip->num_buffer_frames * sizeof(u32) * 8 + 8;
 	info->step = 32;
