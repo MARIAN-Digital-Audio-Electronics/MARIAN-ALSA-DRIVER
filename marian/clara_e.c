@@ -104,7 +104,7 @@ struct snd_pcm_hardware const hw_playback = {
 	.info = (SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_NONINTERLEAVED |
 		SNDRV_PCM_INFO_JOINT_DUPLEX | SNDRV_PCM_INFO_SYNC_START |
 		SNDRV_PCM_INFO_BLOCK_TRANSFER),
-	.formats = SNDRV_PCM_FMTBIT_S32_LE,
+	.formats = SNDRV_PCM_FMTBIT_S24_3LE, //SNDRV_PCM_FMTBIT_S32_LE,
 	.rates = (SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 |
 		SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000 |
 		SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_192000),
@@ -233,7 +233,7 @@ static int channel_dma_offset(struct snd_pcm_substream *substream,
 	int size = substream->runtime->buffer_size;
 
 	info->offset = 0;
-	info->first = channel * chip->num_buffer_frames * sizeof(u32) * 8;
+	info->first = channel * chip->num_buffer_frames * sizeof(u32) * 8 + 8;
 	info->step = 32;
 	snd_printk(KERN_DEBUG "channel_dma_offset: channel: %d, offset: %d\n",
 		channel, info->first/8);
