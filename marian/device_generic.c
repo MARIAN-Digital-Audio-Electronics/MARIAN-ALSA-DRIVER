@@ -164,3 +164,13 @@ u32 generic_get_build_no(struct generic_chip *chip)
 {
 	return read_reg32_bar0(chip, ADDR_BUILD_NO_REG);
 }
+
+enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate)
+{
+	if (sample_rate <= 50000)
+		return CLOCK_MODE_48;
+	else if (sample_rate <= 100000)
+		return CLOCK_MODE_96;
+	else
+		return CLOCK_MODE_192;
+}

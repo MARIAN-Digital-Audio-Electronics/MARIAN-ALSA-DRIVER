@@ -10,7 +10,7 @@
 #include "dma_ng.h"
 
 #define MIN_NUM_CHANNELS 1
-#define MAX_NUM_CHANNELS 2
+#define MAX_NUM_CHANNELS 512
 #define NUM_PERIODS 2
 #define MAX_NUM_BLOCKS 128
 #define DMA_BLOCK_SIZE_BYTES (16*sizeof(u32))
@@ -100,7 +100,8 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->pcm_capture_ops = &capture_ops;
 }
 
-struct snd_pcm_hardware const hw_playback = {
+// capabilities are the same for playback and capture on Clara E
+struct snd_pcm_hardware const hw_caps = {
 	.info = (SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_NONINTERLEAVED |
 		SNDRV_PCM_INFO_JOINT_DUPLEX | SNDRV_PCM_INFO_SYNC_START |
 		SNDRV_PCM_INFO_BLOCK_TRANSFER),
@@ -112,43 +113,60 @@ struct snd_pcm_hardware const hw_playback = {
 	.rate_max = 192000,
 	.channels_min = MIN_NUM_CHANNELS,
 	.channels_max = MAX_NUM_CHANNELS,
-	.buffer_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * NUM_PERIODS * MAX_NUM_CHANNELS,
+	.buffer_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS *
+		NUM_PERIODS * MAX_NUM_CHANNELS,
 	.period_bytes_min = DMA_BLOCK_SIZE_BYTES * MIN_NUM_CHANNELS,
-	.period_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * MAX_NUM_CHANNELS,
+	.period_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS *
+		MAX_NUM_CHANNELS,
 	.periods_min = NUM_PERIODS,
 	.periods_max = NUM_PERIODS,
 	.fifo_size = 0,
 };
-struct snd_pcm_hardware const hw_capture = hw_playback;
 
-static const unsigned int period_sizes[] = { 512, };
-static const struct snd_pcm_hw_constraint_list hw_constraints_period_sizes = {
-	.count = ARRAY_SIZE(period_sizes),
-	.list = period_sizes,
-	.mask = 0
+// TODO ToG: the max period size does not only depend on the clock mode but
+// also the actual number of used channels.
+static const unsigned int period_sizes_cm48[] =	{ 16, 32, 48, 64, 96, 128, 192,
+	256, 384, 512, 768, 1024};
+static const unsigned int period_sizes_cm96[] = { 16, 32, 48, 64, 96, 128, 192,
+	256, 384, 512, 768, 1024, 1536, 2048};
+static const unsigned int period_sizes_cm192[] = { 16, 32, 48, 64, 96, 128, 192,
+	256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096};
+
+static const struct snd_pcm_hw_constraint_list hw_constraints_period_sizes[] = {
+	{	.count = ARRAY_SIZE(period_sizes_cm48),
+		.list = period_sizes_cm48,
+		.mask = 0},
+	{	.count = ARRAY_SIZE(period_sizes_cm96),
+		.list = period_sizes_cm96,
+		.mask = 0},
+	{	.count = ARRAY_SIZE(period_sizes_cm192),
+		.list = period_sizes_cm192,
+		.mask = 0},
 };
 
-static int pcm_playback_open(struct snd_pcm_substream *substream)
+static const u16 max_channels[CLOCK_MODE_192] = {512, 256, 128};
+
+static int pcm_open(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	snd_printk(KERN_INFO "pcm_playback_open\n");
+	enum clock_mode cmode =
+		generic_sample_rate_to_clock_mode(substream->runtime->rate);
 	snd_pcm_set_sync(substream);
-	substream->runtime->hw = hw_playback;
-	snd_pcm_set_runtime_buffer(substream, &chip->playback_buf);
-	chip->playback_substream = substream;
-	snd_pcm_hw_constraint_list(substream->runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, &hw_constraints_period_sizes);
-	return 0;
-}
+	snd_pcm_hw_constraint_list(substream->runtime, 0,
+		SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
+		&hw_constraints_period_sizes[cmode]);
+	substream->runtime->hw = hw_caps;
+	// overwrite clock mode dependant values
+	substream->runtime->hw.channels_max = max_channels[cmode];
 
-static int pcm_capture_open(struct snd_pcm_substream *substream)
-{
-	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	snd_printk(KERN_DEBUG "pcm_capture_open\n");
-	snd_pcm_set_sync(substream);
-	substream->runtime->hw = hw_capture;
-	snd_pcm_set_runtime_buffer(substream, &chip->capture_buf);
-	chip->capture_substream = substream;
-	snd_pcm_hw_constraint_list(substream->runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_SIZE, &hw_constraints_period_sizes);
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		snd_pcm_set_runtime_buffer(substream, &chip->playback_buf);
+		chip->playback_substream = substream;
+	} else {
+		snd_pcm_set_runtime_buffer(substream, &chip->capture_buf);
+		chip->capture_substream = substream;
+	}
 	return 0;
 }
 
@@ -278,7 +296,7 @@ static snd_pcm_uframes_t pcm_pointer(struct snd_pcm_substream *substream)
 }
 
 static struct snd_pcm_ops const playback_ops = {
-	.open = pcm_playback_open,
+	.open = pcm_open,
 	.close = pcm_playback_close,
 	.ioctl = pcm_ioctl,
 	.hw_params = pcm_hw_params,
@@ -289,7 +307,7 @@ static struct snd_pcm_ops const playback_ops = {
 };
 
 static struct snd_pcm_ops const capture_ops = {
-	.open = pcm_capture_open,
+	.open = pcm_open,
 	.close = pcm_capture_close,
 	.ioctl = pcm_ioctl,
 	.hw_params = pcm_hw_params,

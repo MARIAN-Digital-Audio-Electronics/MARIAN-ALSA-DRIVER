@@ -21,6 +21,11 @@ enum dma_status {
 	DMA_STATUS_PREPARED,
 	DMA_STATUS_RUNNING,
 };
+enum clock_mode {
+	CLOCK_MODE_48 = 0,
+	CLOCK_MODE_96 = 1,
+	CLOCK_MODE_192 = 2,
+};
 
 // ALSA specific free operation
 int generic_chip_dev_free(struct snd_device *device);
@@ -60,4 +65,6 @@ void generic_indicate_state(struct generic_chip *chip,
 inline u32 generic_get_sample_counter(struct generic_chip *chip);
 inline u32 generic_get_irq_status(struct generic_chip *chip);
 inline u32 generic_get_build_no(struct generic_chip *chip);
+enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate);
+
 #endif
