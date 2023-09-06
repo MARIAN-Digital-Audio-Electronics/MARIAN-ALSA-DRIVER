@@ -46,7 +46,7 @@ static int timer_thread_func(void *data)
 		chip->timer_callback(chip);
 		end = jiffies;
 		msleep(max((signed long)(chip->timer_interval_ms) -
-			jiffies_to_msecs(end - start), (signed long)20));
+			jiffies_to_msecs(end - start), (signed long)1));
 	}
 	snd_printk(KERN_DEBUG "timer thread stopped\n");
 	return 0;
