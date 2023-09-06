@@ -1,6 +1,8 @@
 // TODO ToG: Add license header
 
 #include <linux/pci.h>
+#include <linux/delay.h>
+#include <linux/kernel.h>
 #include <sound/core.h>
 #include "device_generic.h"
 
@@ -8,6 +10,11 @@
 #define ADDR_LED_REG 0xF4
 #define ADDR_SAMPLE_COUNTER_REG 0x8C
 #define ADDR_BUILD_NO_REG 0xFC
+#define ADDR_WC_SCAN_SOURCE_REG 0xC8
+#define ADDR_WC_SCAN_RESULT_REG 0x94
+#define MASK_WC_SCAN_READY 0x80000000
+#define MASK_WC_SCAN_RESULT 0x3FFFF
+#define WC_ACCURACY_HZ 100
 
 static int acquire_pci_resources(struct generic_chip *chip);
 static void release_pci_resources(struct generic_chip *chip);
@@ -176,4 +183,43 @@ enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate)
 		return CLOCK_MODE_96;
 	else
 		return CLOCK_MODE_192;
+}
+
+static unsigned int standard_wordclocks_hz[] = {22050, 32000, 44100, 48000,
+	64000, 88200, 96000, 128000, 176400, 192000, 256000, 352800, 384000,};
+
+static unsigned int snap_to_standard_wc_hz(unsigned int freq_hz)
+{
+	unsigned int i;
+	unsigned int standard_freq_hz;
+	// setup a tolerance of 1%
+	unsigned int max_freq_hz = freq_hz * 101;
+	unsigned int min_freq_hz = freq_hz * 99;
+
+	for (i = 0; i < ARRAY_SIZE(standard_wordclocks_hz); i++) {
+		standard_freq_hz = standard_wordclocks_hz[i] * 100;
+		if (standard_freq_hz >= min_freq_hz && standard_freq_hz <= max_freq_hz) {
+			return standard_wordclocks_hz[i];
+		}
+	}
+	return freq_hz;
+}
+
+unsigned int generic_measure_wordclock_hz(struct generic_chip *chip, unsigned int source) {
+	unsigned int reg_val;
+	unsigned int freq_hz;
+	int retries = 3;
+	write_reg32_bar0(chip, ADDR_WC_SCAN_SOURCE_REG, source & 0x7);
+	while (retries > 0) {
+		reg_val = read_reg32_bar0(chip, ADDR_WC_SCAN_RESULT_REG);
+		if (reg_val & MASK_WC_SCAN_READY)
+			break;
+		msleep(3);
+		retries--;
+	}
+	if (retries > 0) {
+		 freq_hz = (1280000000 / ((reg_val & MASK_WC_SCAN_RESULT)+1));
+		 return snap_to_standard_wc_hz(freq_hz);
+	}
+	return 0;
 }

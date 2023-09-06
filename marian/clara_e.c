@@ -321,6 +321,7 @@ static struct snd_pcm_ops const capture_ops = {
 
 static void timer_callback(struct generic_chip *chip)
 {
-	snd_printk(KERN_DEBUG "timer_callback\n");
-	msleep(200);
+	unsigned int internal_clock = generic_measure_wordclock_hz(chip, 0);
+	snd_printk(KERN_DEBUG "timer_callback: internal_clock: %d\n",
+		internal_clock);
 };

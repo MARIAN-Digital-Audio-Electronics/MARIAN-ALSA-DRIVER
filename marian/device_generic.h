@@ -70,5 +70,6 @@ inline u32 generic_get_sample_counter(struct generic_chip *chip);
 inline u32 generic_get_irq_status(struct generic_chip *chip);
 inline u32 generic_get_build_no(struct generic_chip *chip);
 enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate);
+unsigned int generic_measure_wordclock_hz(struct generic_chip *chip, unsigned int source);
 
 #endif
