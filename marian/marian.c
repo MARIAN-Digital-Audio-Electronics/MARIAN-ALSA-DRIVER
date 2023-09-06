@@ -206,6 +206,11 @@ static int driver_probe(struct pci_dev *pci_dev,
 		goto error_free_card;
 	}
 
+	// create controls
+	err = dev_specifics.create_controls(chip);
+	if (err < 0)
+		goto error_free_card;
+
 	// register as ALSA device
 	err = snd_card_register(card);
 	if (err < 0)
@@ -227,7 +232,7 @@ error_free_card:
 		kthread_stop(chip->timer_thread);
 	snd_card_free(card);
 	return err;
-};
+}
 
 static void driver_remove(struct pci_dev *pci)
 {
@@ -239,7 +244,7 @@ static void driver_remove(struct pci_dev *pci)
 	kthread_stop(chip->timer_thread);
 	snd_card_free(card);
 	pci_set_drvdata(pci, NULL);
-};
+}
 
 static struct pci_device_id pci_ids[] = {
 	{ PCI_DEVICE(MARIAN_VENDOR_ID, CLARA_E_DEVICE_ID) },

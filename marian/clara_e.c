@@ -16,6 +16,8 @@
 #define MAX_NUM_BLOCKS 128
 #define DMA_BLOCK_SIZE_BYTES (16*sizeof(u32))
 #define TIMER_INTERVAL_MS 1000
+#define ADDR_CLOCK_MODE_READ_REG 0x80
+#define MASK_CLOCK_MODE 0x3
 
 struct clara_e_chip {
 	u32 _dummy;
@@ -23,6 +25,7 @@ struct clara_e_chip {
 static struct snd_pcm_ops const playback_ops;
 static struct snd_pcm_ops const capture_ops;
 static void timer_callback(struct generic_chip *chip);
+static int create_controls(struct generic_chip *chip);
 
 static bool hw_revision_valid(u8 rev)
 {
@@ -103,6 +106,7 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->pcm_capture_ops = &capture_ops;
 	dev_specifics->timer_callback = timer_callback;
 	dev_specifics->timer_interval_ms = TIMER_INTERVAL_MS;
+	dev_specifics->create_controls = create_controls;
 }
 
 // capabilities are the same for playback and capture on Clara E
@@ -162,6 +166,12 @@ static int pcm_open(struct snd_pcm_substream *substream)
 		SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
 		&hw_constraints_period_sizes[cmode]);
 	substream->runtime->hw = hw_caps;
+
+	// since Dante is the clock master, the sample rate is fixed
+	substream->runtime->hw.rate_min =
+		atomic_read(&chip->current_sample_rate);
+	substream->runtime->hw.rate_max =
+		atomic_read(&chip->current_sample_rate);
 	// overwrite clock mode dependant values
 	substream->runtime->hw.channels_max = max_channels[cmode];
 
@@ -239,39 +249,37 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 			(void *)base_addr);
 	}
 
+	{
+		unsigned int current_rate =
+			atomic_read(&chip->current_sample_rate);
+		if (substream->runtime->rate != current_rate) {
+			snd_printk(KERN_WARNING
+				"pcm_playback_open: sample rate mismatch. "
+				"requested: %d, Dante: %d\n",
+				substream->runtime->rate, current_rate);
+		}
+	}
+
 	no_blocks = substream->runtime->period_size / 16 * 2;
 	snd_printk(KERN_DEBUG "pcm_prepare: no_blocks: %d\n", no_blocks);
-	dma_prepare(chip, channels,
+	dma_ng_prepare(chip, channels,
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK),
 		base_addr, no_blocks);
 	return 0;
 }
-
-static int channel_dma_offset(struct snd_pcm_substream *substream,
-				    struct snd_pcm_channel_info *info)
-{
-	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	unsigned int channel = info->channel;
-	info->offset = 0;
-	info->first = channel * chip->num_buffer_frames * sizeof(u32) * 8 + 8;
-	info->step = 32;
-	snd_printk(KERN_DEBUG "channel_dma_offset: channel: %d, offset: %d\n",
-		channel, info->first/8);
-	return 0;
-}
-
 
 static int pcm_ioctl(struct snd_pcm_substream *substream,
 	unsigned int cmd, void *arg)
 {
 	switch (cmd) {
 	case SNDRV_PCM_IOCTL1_CHANNEL_INFO:
-		return channel_dma_offset(substream, arg);
+		return generic_dma_channel_offset(substream, arg,
+			SNDRV_PCM_FMTBIT_S24_3LE);
 	default:
 		break;
 	}
 
-	return snd_pcm_lib_ioctl(substream, cmd, arg);
+	return generic_pcm_ioctl(substream, cmd, arg);
 }
 
 static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
@@ -279,11 +287,11 @@ static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 		snd_printk(KERN_DEBUG "pcm_trigger: start\n");
-		dma_start(snd_pcm_substream_chip(substream));
+		dma_ng_start(snd_pcm_substream_chip(substream));
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		snd_printk(KERN_DEBUG "pcm_trigger: stop\n");
-		dma_stop(snd_pcm_substream_chip(substream));
+		dma_ng_stop(snd_pcm_substream_chip(substream));
 		break;
 	default:
 		return -EINVAL;
@@ -319,9 +327,41 @@ static struct snd_pcm_ops const capture_ops = {
 	.pointer = pcm_pointer,
 };
 
+static int create_controls(struct generic_chip *chip)
+{
+	generic_read_wordclock_control_create(chip, "Dante Clock", 0);
+	return 0;
+}
+
+// One might wonder why this is not in the generic part. Well the Dante card
+// is the only one to set the clock only from the Dante side (yet).
+static enum clock_mode get_clock_mode(struct generic_chip *chip)
+{
+	u32 reg = read_reg32_bar0(chip, ADDR_CLOCK_MODE_READ_REG);
+	enum clock_mode cmode = CLOCK_MODE_48;
+
+	switch (reg & MASK_CLOCK_MODE) {
+	case 0b11:
+		cmode = CLOCK_MODE_48;
+		break;
+	case 0b10:
+		cmode = CLOCK_MODE_96;
+		break;
+	case 0b01:
+		cmode = CLOCK_MODE_192;
+		break;
+	default:
+		snd_printk(KERN_ERR "get_clock_mode: invalid clock mode: %d\n",
+			reg);
+		break;
+	}
+	return cmode;
+}
+
 static void timer_callback(struct generic_chip *chip)
 {
-	unsigned int internal_clock = generic_measure_wordclock_hz(chip, 0);
-	snd_printk(KERN_DEBUG "timer_callback: internal_clock: %d\n",
-		internal_clock);
-};
+	// updating some measurements
+	atomic_set(&chip->current_sample_rate,
+		generic_measure_wordclock_hz(chip, 0));
+	atomic_set(&chip->clock_mode, get_clock_mode(chip));
+}

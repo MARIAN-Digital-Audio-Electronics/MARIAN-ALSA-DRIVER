@@ -4,6 +4,7 @@
 #define MARIAN_GENERIC_H
 
 #include <linux/pci.h>
+#include <linux/atomic.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 
@@ -26,6 +27,7 @@ enum clock_mode {
 	CLOCK_MODE_96 = 1,
 	CLOCK_MODE_192 = 2,
 };
+extern char *clock_mode_names[];
 typedef void (*timer_callback_func)(struct generic_chip *chip);
 
 // ALSA specific free operation
@@ -49,6 +51,8 @@ struct generic_chip {
 	struct task_struct *timer_thread;
 	timer_callback_func timer_callback;
 	unsigned long timer_interval_ms;
+	atomic_t current_sample_rate;
+	atomic_t clock_mode;
 	void *specific;
 	chip_free_func specific_free;
 };
@@ -66,10 +70,17 @@ enum state_indicator {
 void generic_indicate_state(struct generic_chip *chip,
 	enum state_indicator state);
 
+int generic_dma_channel_offset(struct snd_pcm_substream *substream,
+	struct snd_pcm_channel_info *info, unsigned long alignment);
+int generic_pcm_ioctl(struct snd_pcm_substream *substream, unsigned int cmd,
+	void *arg);
 inline u32 generic_get_sample_counter(struct generic_chip *chip);
 inline u32 generic_get_irq_status(struct generic_chip *chip);
 inline u32 generic_get_build_no(struct generic_chip *chip);
 enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate);
-unsigned int generic_measure_wordclock_hz(struct generic_chip *chip, unsigned int source);
+unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
+	unsigned int source);
+int generic_read_wordclock_control_create(struct generic_chip *chip,
+	char *label, unsigned int idx);
 
 #endif

@@ -24,6 +24,7 @@ typedef int (*chip_new_func)(struct snd_card *card,
 	struct generic_chip **rchip);
 typedef bool (*detect_hw_presence_func)(struct generic_chip *chip);
 typedef void (*soft_reset_func)(struct generic_chip *chip);
+typedef int (*create_controls_func)(struct generic_chip *chip);
 
 /* This structure holds the device specific functions
 	and descriptors that can only be determined at runtime.
@@ -47,6 +48,7 @@ struct device_specifics {
 	struct snd_pcm_ops const *pcm_capture_ops;
 	unsigned long timer_interval_ms;
 	timer_callback_func timer_callback;
+	create_controls_func create_controls;
 };
 
 void clear_device_specifics(struct device_specifics *dev_specifics);

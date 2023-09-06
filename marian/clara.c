@@ -21,7 +21,7 @@ static void chip_free(struct generic_chip *chip)
 	kfree(clara_chip);
 	chip->specific = NULL;
 	chip->specific_free = NULL;
-};
+}
 
 int clara_chip_new(struct snd_card *card,
 	struct pci_dev *pci_dev,
@@ -60,7 +60,7 @@ error:
 	release_pci_resources(chip);
 	kfree(clara_chip);
 	return err;
-};
+}
 
 static int acquire_pci_resources(struct generic_chip *chip)
 {

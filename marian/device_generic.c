@@ -3,7 +3,9 @@
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/atomic.h>
 #include <sound/core.h>
+#include <sound/control.h>
 #include "device_generic.h"
 
 #define ADDR_IRQ_STATUS_REG 0x00
@@ -16,8 +18,18 @@
 #define MASK_WC_SCAN_RESULT 0x3FFFF
 #define WC_ACCURACY_HZ 100
 
+char *clock_mode_names[] = {
+	"CLOCK_MODE_48",
+	"CLOCK_MODE_96",
+	"CLOCK_MODE_192",
+};
+
 static int acquire_pci_resources(struct generic_chip *chip);
 static void release_pci_resources(struct generic_chip *chip);
+
+/*
+	CHIP MANAGEMENT FUNCTIONS
+*/
 
 int generic_chip_dev_free(struct snd_device *device)
 {
@@ -56,6 +68,8 @@ int generic_chip_new(struct snd_card *card,
 	chip->timer_interval_ms = 0;
 	chip->specific = NULL;
 	chip->specific_free = NULL;
+	atomic_set(&chip->current_sample_rate, 0);
+	atomic_set(&chip->clock_mode, CLOCK_MODE_48);
 
 	err = acquire_pci_resources(chip);
 	if (err < 0)
@@ -70,7 +84,7 @@ error:
 	release_pci_resources(chip);
 	kfree(chip);
 	return err;
-};
+}
 
 void generic_chip_free(struct generic_chip *chip)
 {
@@ -154,6 +168,41 @@ static void release_pci_resources(struct generic_chip *chip)
 	snd_printk(KERN_DEBUG "release_pci_resources\n");
 }
 
+/*
+	HARDWARE SPECIFIC FUNCTIONS
+*/
+
+int generic_dma_channel_offset(struct snd_pcm_substream *substream,
+	struct snd_pcm_channel_info *info, unsigned long alignment)
+{
+	struct generic_chip *chip = snd_pcm_substream_chip(substream);
+	unsigned int channel = info->channel;
+	info->offset = 0;
+	info->step = 32;
+	switch (alignment) {
+	case SNDRV_PCM_FMTBIT_S24_3LE:
+		info->first = channel * chip->num_buffer_frames *
+			sizeof(u32) * 8 + 8;
+		break;
+	case SNDRV_PCM_FMTBIT_S32_LE:
+		info->first = channel * chip->num_buffer_frames *
+			sizeof(u32) * 8;
+		break;
+	default:
+		return -EINVAL;
+	}
+	snd_printk(KERN_DEBUG "generic_dma_channel_offset: channel: %d, "
+		"offset: %d\n", channel, info->first/8);
+	return 0;
+}
+
+int generic_pcm_ioctl(struct snd_pcm_substream *substream, unsigned int cmd,
+	void *arg)
+{
+	// nothing specific here yet
+	return snd_pcm_lib_ioctl(substream, cmd, arg);
+}
+
 void generic_indicate_state(struct generic_chip *chip,
 	enum state_indicator state)
 {
@@ -198,7 +247,8 @@ static unsigned int snap_to_standard_wc_hz(unsigned int freq_hz)
 
 	for (i = 0; i < ARRAY_SIZE(standard_wordclocks_hz); i++) {
 		standard_freq_hz = standard_wordclocks_hz[i] * 100;
-		if (standard_freq_hz >= min_freq_hz && standard_freq_hz <= max_freq_hz) {
+		if (standard_freq_hz >= min_freq_hz &&
+			standard_freq_hz <= max_freq_hz) {
 			return standard_wordclocks_hz[i];
 		}
 	}
@@ -206,7 +256,7 @@ static unsigned int snap_to_standard_wc_hz(unsigned int freq_hz)
 }
 
 unsigned int generic_measure_wordclock_hz(struct generic_chip *chip, unsigned int source) {
-	unsigned int reg_val;
+	u32 reg_val;
 	unsigned int freq_hz;
 	int retries = 3;
 	write_reg32_bar0(chip, ADDR_WC_SCAN_SOURCE_REG, source & 0x7);
@@ -222,4 +272,48 @@ unsigned int generic_measure_wordclock_hz(struct generic_chip *chip, unsigned in
 		 return snap_to_standard_wc_hz(freq_hz);
 	}
 	return 0;
+}
+
+/*
+	GENERIC CONTROLS
+*/
+
+static int wordclock_frequency_info(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 22050;
+	uinfo->value.integer.max = 192000;
+	uinfo->value.integer.step = 1;
+	return 0;
+}
+
+static int wordclock_frequency_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct generic_chip *chip = snd_kcontrol_chip(kcontrol);
+
+	switch ((unsigned int)(kcontrol->private_value)) {
+	case 0:
+		ucontrol->value.integer.value[0] =
+			atomic_read(&chip->current_sample_rate);
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int generic_read_wordclock_control_create(struct generic_chip *chip, char *label,
+	unsigned int idx) {
+	struct snd_kcontrol_new c = {
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = label,
+		.private_value = idx,
+		.access = SNDRV_CTL_ELEM_ACCESS_READ | SNDRV_CTL_ELEM_ACCESS_VOLATILE,
+		.info = wordclock_frequency_info,
+		.get = wordclock_frequency_get
+	};
+	return snd_ctl_add(chip->card, snd_ctl_new1(&c, chip));
 }

@@ -19,6 +19,7 @@ void clear_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->pcm_capture_ops = NULL;
 	dev_specifics->timer_interval_ms = 0;
 	dev_specifics->timer_callback = NULL;
+	dev_specifics->create_controls = NULL;
 }
 
 bool verify_device_specifics(struct device_specifics *dev_specifics)
@@ -89,7 +90,11 @@ bool verify_device_specifics(struct device_specifics *dev_specifics)
 			"verify_device_specifics: timer_callback is NULL\n");
 		valid = false;
 	}
-
+	if (dev_specifics->create_controls == NULL) {
+		snd_printk(KERN_ERR
+			"verify_device_specifics: create_controls is NULL\n");
+		valid = false;
+	}
 
 	return valid;
 }

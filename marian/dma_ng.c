@@ -85,7 +85,7 @@ int dma_reset_engine(struct generic_chip *chip)
 	return 0;
 }
 
-int dma_prepare(struct generic_chip *chip, unsigned int channels,
+int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 	bool playback, u64 host_base_addr, unsigned int num_blocks)
 {
 
@@ -136,7 +136,7 @@ int dma_prepare(struct generic_chip *chip, unsigned int channels,
 	return 0;
 }
 
-int dma_start(struct generic_chip *chip)
+int dma_ng_start(struct generic_chip *chip)
 {
 	write_reg32_bar0(chip, ADDR_PREPARE_RUN_REG,
 		MASK_ENGINE_PREPARE | MASK_ENGINE_RUN);
@@ -144,7 +144,7 @@ int dma_start(struct generic_chip *chip)
 	return 0;
 }
 
-int dma_stop(struct generic_chip *chip)
+int dma_ng_stop(struct generic_chip *chip)
 {
 	write_reg32_bar0(chip, ADDR_PREPARE_RUN_REG, 0);
 	chip->dma_status = DMA_STATUS_IDLE;
