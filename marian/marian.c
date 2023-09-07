@@ -132,7 +132,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 
 	if (request_irq
 		(chip->pci_dev->irq, dev_specifics.irq_handler,
-		IRQF_SHARED, "MARIAN_PCIe", chip) < 0) {
+		IRQF_SHARED, KBUILD_MODNAME, chip) < 0) {
 		snd_printk(KERN_ERR "request_irq error: %d\n", chip->pci_dev->irq);
 		err = -ENXIO;
 		goto error_free_chip;
@@ -253,7 +253,7 @@ static struct pci_device_id pci_ids[] = {
 MODULE_DEVICE_TABLE(pci, pci_ids);
 
 static struct pci_driver pci_driver = {
-	.name = "MARIAN PCIe driver",
+	.name = KBUILD_MODNAME,
 	.id_table = pci_ids,
 	.probe = driver_probe,
 	.remove = driver_remove,
