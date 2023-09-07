@@ -23,3 +23,4 @@ bool clara_detect_hw_presence(struct generic_chip *chip);
 /* Resets all relevant registers to default values mainly
  * to avoid spurious interrupts. */
 void clara_soft_reset(struct generic_chip *chip);
+void clara_timer_callback(struct generic_chip *chip);

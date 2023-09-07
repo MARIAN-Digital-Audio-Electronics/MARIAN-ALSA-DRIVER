@@ -120,3 +120,8 @@ void clara_soft_reset(struct generic_chip *chip)
 {
 	// TODO ToG: reset IRQs / DMA engine
 }
+
+void clara_timer_callback(struct generic_chip *chip)
+{
+	generic_timer_callback(chip);
+}

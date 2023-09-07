@@ -70,6 +70,7 @@ int generic_chip_new(struct snd_card *card,
 	chip->specific_free = NULL;
 	atomic_set(&chip->current_sample_rate, 0);
 	atomic_set(&chip->clock_mode, CLOCK_MODE_48);
+	atomic_set(&chip->ctl_id_sample_rate, 0);
 
 	err = acquire_pci_resources(chip);
 	if (err < 0)
@@ -255,7 +256,8 @@ static unsigned int snap_to_standard_wc_hz(unsigned int freq_hz)
 	return freq_hz;
 }
 
-unsigned int generic_measure_wordclock_hz(struct generic_chip *chip, unsigned int source) {
+unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
+	unsigned int source) {
 	u32 reg_val;
 	unsigned int freq_hz;
 	int retries = 3;
@@ -274,6 +276,29 @@ unsigned int generic_measure_wordclock_hz(struct generic_chip *chip, unsigned in
 	return 0;
 }
 
+void generic_timer_callback(struct generic_chip *chip)
+{
+	/// updating some measurements
+	unsigned int new_rate = generic_measure_wordclock_hz(chip, 0);
+	unsigned int old_rate = atomic_read(&chip->current_sample_rate);
+	// when the sample rate changes, notify the user space
+	if (new_rate != old_rate) {
+		struct snd_kcontrol *kctl = snd_ctl_find_numid(chip->card,
+			(unsigned int)atomic_read(&chip->ctl_id_sample_rate));
+		atomic_set(&chip->current_sample_rate,
+			generic_measure_wordclock_hz(chip, 0));
+		if (kctl != NULL) {
+			snd_ctl_notify(chip->card, SNDRV_CTL_EVENT_MASK_VALUE,
+				&kctl->id);
+			snd_printk(KERN_INFO "timer_callback: "
+				"notified sample rate change\n");
+		}
+		snd_printk(KERN_INFO "timer_callback: new sample rate: %d\n",
+			new_rate);
+
+	}
+}
+
 /*
 	GENERIC CONTROLS
 */
@@ -289,6 +314,9 @@ static int wordclock_frequency_info(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+
+// TODO ToG: This is not yet card indepentent
+// make this more generic!
 static int wordclock_frequency_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -305,15 +333,27 @@ static int wordclock_frequency_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-int generic_read_wordclock_control_create(struct generic_chip *chip, char *label,
-	unsigned int idx) {
-	struct snd_kcontrol_new c = {
-		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+int generic_control_create(struct generic_chip *chip,
+	struct snd_kcontrol_new *c_new, unsigned int *rcontrol_id) {
+	struct snd_kcontrol *c = snd_ctl_new1(c_new, chip);
+	int err = snd_ctl_add(chip->card, c);
+	if (err < 0)
+		*rcontrol_id = 0;
+	else
+		*rcontrol_id = c->id.numid;
+	return err;
+}
+
+int generic_read_wordclock_control_create(struct generic_chip *chip,
+	char *label, unsigned int idx, unsigned int *rcontrol_id) {
+	struct snd_kcontrol_new c_new = {
+		.iface = SNDRV_CTL_ELEM_IFACE_CARD,
 		.name = label,
 		.private_value = idx,
-		.access = SNDRV_CTL_ELEM_ACCESS_READ | SNDRV_CTL_ELEM_ACCESS_VOLATILE,
+		.access = SNDRV_CTL_ELEM_ACCESS_READ |
+			SNDRV_CTL_ELEM_ACCESS_VOLATILE,
 		.info = wordclock_frequency_info,
 		.get = wordclock_frequency_get
 	};
-	return snd_ctl_add(chip->card, snd_ctl_new1(&c, chip));
+	return generic_control_create(chip, &c_new, rcontrol_id);
 }

@@ -53,6 +53,9 @@ struct generic_chip {
 	unsigned long timer_interval_ms;
 	atomic_t current_sample_rate;
 	atomic_t clock_mode;
+	// we want to store this control id to notify the user space of
+	// sample rate changes
+	atomic_t ctl_id_sample_rate;
 	void *specific;
 	chip_free_func specific_free;
 };
@@ -69,7 +72,6 @@ enum state_indicator {
 };
 void generic_indicate_state(struct generic_chip *chip,
 	enum state_indicator state);
-
 int generic_dma_channel_offset(struct snd_pcm_substream *substream,
 	struct snd_pcm_channel_info *info, unsigned long alignment);
 int generic_pcm_ioctl(struct snd_pcm_substream *substream, unsigned int cmd,
@@ -77,10 +79,11 @@ int generic_pcm_ioctl(struct snd_pcm_substream *substream, unsigned int cmd,
 inline u32 generic_get_sample_counter(struct generic_chip *chip);
 inline u32 generic_get_irq_status(struct generic_chip *chip);
 inline u32 generic_get_build_no(struct generic_chip *chip);
+void generic_timer_callback(struct generic_chip *chip);
 enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate);
 unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
 	unsigned int source);
 int generic_read_wordclock_control_create(struct generic_chip *chip,
-	char *label, unsigned int idx);
+	char *label, unsigned int idx, unsigned int *rcontrol_id);
 
 #endif

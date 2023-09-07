@@ -3,6 +3,7 @@
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <sound/pcm.h>
+#include <sound/control.h>
 #include <sound/pcm_params.h>
 #include "device_abstraction.h"
 #include "device_generic.h"
@@ -137,9 +138,9 @@ struct snd_pcm_hardware const hw_caps = {
 static const unsigned int period_sizes_cm48[] =	{ 16, 32, 48, 64, 96, 128, 192,
 	256, 384, 512, 768, 1024};
 static const unsigned int period_sizes_cm96[] = { 16, 32, 48, 64, 96, 128, 192,
-	256, 384, 512, 768, 1024, 1536, 2048};
+	256, 384, 512, 768, 1024, 2048};
 static const unsigned int period_sizes_cm192[] = { 16, 32, 48, 64, 96, 128, 192,
-	256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096};
+	256, 384, 512, 768, 1024, 1536, 2048, 4096};
 
 static const struct snd_pcm_hw_constraint_list hw_constraints_period_sizes[] = {
 	{	.count = ARRAY_SIZE(period_sizes_cm48),
@@ -209,17 +210,17 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 
 	snd_printk(KERN_DEBUG "pcm_hw_params\n");
-	printk(KERN_DEBUG "  buffer bytes: %d\n",
+	snd_printk(KERN_DEBUG "  buffer bytes: %d\n",
 		params_buffer_bytes(hw_params));
-	printk(KERN_DEBUG "  buffer size : %d\n",
+	snd_printk(KERN_DEBUG "  buffer size : %d\n",
 		params_buffer_size(hw_params));
-	printk(KERN_DEBUG "  period bytes: %d\n",
+	snd_printk(KERN_DEBUG "  period bytes: %d\n",
 		params_period_bytes(hw_params));
-	printk(KERN_DEBUG "  period size : %d\n",
+	snd_printk(KERN_DEBUG "  period size : %d\n",
 		params_period_size(hw_params));
-	printk(KERN_DEBUG "  periods     : %d\n",
+	snd_printk(KERN_DEBUG "  periods     : %d\n",
 		params_periods(hw_params));
-	printk(KERN_DEBUG "  channels    : %d\n",
+	snd_printk(KERN_DEBUG "  channels    : %d\n",
 		params_channels(hw_params));
 
 	chip->num_buffer_frames = params_buffer_size(hw_params);
@@ -329,7 +330,15 @@ static struct snd_pcm_ops const capture_ops = {
 
 static int create_controls(struct generic_chip *chip)
 {
-	generic_read_wordclock_control_create(chip, "Dante Clock", 0);
+	int err = 0;
+	unsigned int ctl_id = 0;
+	err = generic_read_wordclock_control_create(chip, "Sample Rate", 0,
+		&ctl_id);
+	if (err < 0)
+		return err;
+	else
+		atomic_set(&chip->ctl_id_sample_rate, ctl_id);
+
 	return 0;
 }
 
@@ -360,8 +369,7 @@ static enum clock_mode get_clock_mode(struct generic_chip *chip)
 
 static void timer_callback(struct generic_chip *chip)
 {
-	// updating some measurements
-	atomic_set(&chip->current_sample_rate,
-		generic_measure_wordclock_hz(chip, 0));
+	clara_timer_callback(chip);
+	// update the clock mode
 	atomic_set(&chip->clock_mode, get_clock_mode(chip));
 }
