@@ -155,9 +155,8 @@ static int driver_probe(struct pci_dev *pci_dev,
 
 		// TODO ToG: move this into a specific part since it is not
 		// compatible with the Seraph series
-		if (snd_dma_alloc_dir_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
-			DMA_BIDIRECTIONAL, 16 * 4 * 512 * 128,
-			&tmp_buf) == 0) {
+		if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
+			16 * 4 * 512 * 128, &tmp_buf) == 0) {
 			snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
 			snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
 			snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
@@ -169,8 +168,8 @@ static int driver_probe(struct pci_dev *pci_dev,
 			err = -ENOMEM;
 			goto error_free_card;
 		}
-		if (snd_dma_alloc_dir_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
-			DMA_BIDIRECTIONAL, 16 * 4 * 512 * 128, &tmp_buf) == 0) {
+		if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
+			16 * 4 * 512 * 128, &tmp_buf) == 0) {
 			snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
 			snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
 			snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
