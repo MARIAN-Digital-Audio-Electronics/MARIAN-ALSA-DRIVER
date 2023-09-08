@@ -90,6 +90,7 @@ int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 {
 
 	u32 channel_enables[NUM_CHANNEL_ENABLE_REGS] = {0};
+	int i = 0;
 	// TODO ToG: this needs to go in the PCM setup section,
 	// not in the DMA setup section
 
@@ -104,10 +105,10 @@ int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 //	if (dma_reset_engine(chip) < 0)
 //		return -EIO;
 
-	for (int i = 0; i < channels; i++) {
+	for (i = 0; i < channels; i++) {
 		channel_enables[i / 32] |= (1 << (i % 32));
 	}
-	for (int i = 0; i < NUM_CHANNEL_ENABLE_REGS; i++) {
+	for (i = 0; i < NUM_CHANNEL_ENABLE_REGS; i++) {
 		write_reg32_bar0(chip, (playback ?
 			ADDR_BASE_PLAYBACK_CHANNELS_REGS :
 			ADDR_BASE_CAPTURE_CHANNELS_REGS) +
