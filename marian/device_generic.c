@@ -169,6 +169,15 @@ static void release_pci_resources(struct generic_chip *chip)
 	snd_printk(KERN_DEBUG "release_pci_resources\n");
 }
 
+void generic_clear_dma_buffer(struct snd_dma_buffer *buf)
+{
+	if (buf == NULL)
+		return;
+	if (buf->area != NULL) {
+		memset(buf->area, 0, buf->bytes);
+	}
+}
+
 /*
 	HARDWARE SPECIFIC FUNCTIONS
 */

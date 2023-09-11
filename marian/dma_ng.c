@@ -30,7 +30,7 @@
 #define CHANNELS_PER_SLICE 512
 #define NUM_CHANNEL_ENABLE_REGS 16
 
-int dma_enable_interrupts(struct generic_chip *chip)
+static int enable_interrupts(struct generic_chip *chip)
 {
 	// enable xilinx core interrupts and transport engine
 	write_reg32_bar1(chip, ADDR_XILINX_H2C_REG, 1);
@@ -43,46 +43,43 @@ int dma_enable_interrupts(struct generic_chip *chip)
 	// same register
 	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG,
 		0xFFFFFFFF & ~(MASK_IRQ_DMA_LOOPBACK | MASK_IRQ_DISABLE_CAPTURE));
-//	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG, 0x02);
 	return 0;
 }
 
-int dma_disable_interrupts(struct generic_chip *chip)
+int dma_ng_disable_interrupts(struct generic_chip *chip)
 {
-	// One strategy would be to completely silence the card
-	// but I decided to not do this.
-	// Any interrupt occuring after this call will be handled by the
-	// ISR anyways.
-//	disable xilinx core interrupts and transport engine
-//	write_reg32_bar1(chip, ADDR_XILINX_H2C_REG, 0);
-//	write_reg32_bar1(chip, ADDR_XILINX_C2H_REG, 0);
-//	write_reg32_bar1(chip, ADDR_XILINX_IRQ_ENABLE_REG, 0);
-//	disable all interrupts
-//	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG,
-//		MASK_IRQ_DISABLE_CAPTURE | MASK_IRQ_DISABLE_PLAYBACK);
+	// disable xilinx core interrupts and transport engine
+	write_reg32_bar1(chip, ADDR_XILINX_H2C_REG, 0);
+	write_reg32_bar1(chip, ADDR_XILINX_C2H_REG, 0);
+	write_reg32_bar1(chip, ADDR_XILINX_IRQ_ENABLE_REG, 0);
+	// disable all interrupts
+	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG,
+		MASK_IRQ_DISABLE_CAPTURE | MASK_IRQ_DISABLE_PLAYBACK);
 	return 0;
 }
 
-int dma_reset_engine(struct generic_chip *chip)
+static int reset_engine(struct generic_chip *chip)
 {
 	u32 val = 0;
-	printk(KERN_ERR "dma_reset_engine");
-	// TODO ToG: clear channel enables
-	// TODO ToG: clear slice addresses
+	int retries = 5;
+	printk(KERN_DEBUG "reset_engine");
 	write_reg32_bar0(chip, ADDR_PREPARE_RUN_REG, 0);
-	write_reg32_bar0(chip, ADDR_RESET_DMA_ENGINE_REG, 0);
 
-	// TODO ToG: we might need to wait a little while before this check
-	val = generic_get_irq_status(chip);
-	if (!(val & MASK_STATUS_IDLE)) {
-		printk(KERN_ERR "dma_reset_engine: machine not idle after "
-			"reset: 0x%08X\n", val);
-		chip->dma_status = DMA_STATUS_UNKNOWN;
-		return -EIO;
+	while (retries-- > 0) {
+		val = generic_get_irq_status(chip);
+		if (val & MASK_STATUS_IDLE) {
+			chip->dma_status = DMA_STATUS_IDLE;
+			snd_printk(KERN_DEBUG "reset_engine: "
+				"%d tries", 5 - retries);
+			return 0;
+		}
+		write_reg32_bar0(chip, ADDR_RESET_DMA_ENGINE_REG, 0);
 	}
 
-	chip->dma_status = DMA_STATUS_IDLE;
-	return 0;
+	printk(KERN_ERR "reset_engine: machine not idle after "
+		"reset: 0x%08X\n", val);
+	chip->dma_status = DMA_STATUS_UNKNOWN;
+	return -EIO;
 }
 
 int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
@@ -91,19 +88,12 @@ int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 
 	u32 channel_enables[NUM_CHANNEL_ENABLE_REGS] = {0};
 	int i = 0;
-	// TODO ToG: this needs to go in the PCM setup section,
-	// not in the DMA setup section
-
-	// set clock mode, clock range, clock source
-//	write_reg32_bar0(chip, 0x7C, 0x00000000); // clock divider
-//	write_reg32_bar0(chip, 0x80, 0x00000000); // clock mode
-//	write_reg32_bar0(chip, 0x8C, 0x00000001); // clock range
-//	write_reg32_bar0(chip, 0x90, 0x00000000); // clock source
 
 	// TODO ToG: either make dependent on playback/capture already
 	// running or move to another place altogether
-//	if (dma_reset_engine(chip) < 0)
-//		return -EIO;
+	if (chip->dma_status != DMA_STATUS_RUNNING)
+		if (reset_engine(chip) < 0)
+			return -EIO;
 
 	for (i = 0; i < channels; i++) {
 		channel_enables[i / 32] |= (1 << (i % 32));
@@ -133,12 +123,14 @@ int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 			HIGH_ADDR(host_base_addr));
 	}
 
-	dma_enable_interrupts(chip);
+	enable_interrupts(chip);
 	return 0;
 }
 
 int dma_ng_start(struct generic_chip *chip)
 {
+	if (chip->dma_status != DMA_STATUS_IDLE)
+		return -EIO;
 	write_reg32_bar0(chip, ADDR_PREPARE_RUN_REG,
 		MASK_ENGINE_PREPARE | MASK_ENGINE_RUN);
 	chip->dma_status = DMA_STATUS_RUNNING;
@@ -152,14 +144,26 @@ int dma_ng_stop(struct generic_chip *chip)
 	return 0;
 }
 
-irqreturn_t dma_irq_handler(int irq, void *dev_id)
+int dma_ng_disable_channels(struct generic_chip *chip, bool playback)
+{
+	int i = 0;
+	for (i = 0; i < NUM_CHANNEL_ENABLE_REGS; i++) {
+		write_reg32_bar0(chip, (playback ?
+			ADDR_BASE_PLAYBACK_CHANNELS_REGS :
+			ADDR_BASE_CAPTURE_CHANNELS_REGS) +
+			i * REG_ADDR_INCREASE, 0);
+	}
+	return 0;
+}
+
+irqreturn_t dma_ng_irq_handler(int irq, void *dev_id)
 {
 	struct generic_chip *chip = dev_id;
 	u32 val = generic_get_irq_status(chip);
 	if (val == 0)
 		return IRQ_NONE;
 	if (val & MASK_IRQ_STATUS_PREPARED) {
-		snd_printk(KERN_DEBUG "dma_irq_handler: prepare IRQ\n");
+		snd_printk(KERN_DEBUG "dma_ng_irq_handler: prepare IRQ\n");
 	}
 	if (val & MASK_IRQ_STATUS_CAPTURE) {
 		if (chip->playback_substream)
@@ -168,8 +172,8 @@ irqreturn_t dma_irq_handler(int irq, void *dev_id)
 			snd_pcm_period_elapsed(chip->capture_substream);
 	}
 	if (!chip->playback_substream && !chip->capture_substream) {
-		dma_disable_interrupts(chip);
-		snd_printk(KERN_ERR "dma_irq_handler: caught dangling IRQ\n");
+		dma_ng_disable_interrupts(chip);
+		snd_printk(KERN_ERR "dma_ng_irq_handler: caught dangling IRQ\n");
 	}
 	return IRQ_HANDLED;
 }

@@ -85,5 +85,6 @@ unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
 	unsigned int source);
 int generic_read_wordclock_control_create(struct generic_chip *chip,
 	char *label, unsigned int idx, unsigned int *rcontrol_id);
+void generic_clear_dma_buffer(struct snd_dma_buffer *buf);
 
 #endif

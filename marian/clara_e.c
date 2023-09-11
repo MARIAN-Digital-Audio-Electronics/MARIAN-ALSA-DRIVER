@@ -11,11 +11,10 @@
 #include "clara_e.h"
 #include "dma_ng.h"
 
-#define MIN_NUM_CHANNELS 1
-#define MAX_NUM_CHANNELS 512
-#define NUM_PERIODS 2
-#define MAX_NUM_BLOCKS 128
-#define DMA_BLOCK_SIZE_BYTES (16*sizeof(u32))
+#define MIN_NUM_CHANNELS 1 // Clara E
+#define MAX_NUM_CHANNELS 512 // Clara E
+#define MAX_NUM_BLOCKS 128 // Clara E
+#define DMA_BLOCK_SIZE_BYTES (DMA_SAMPLES_PER_BLOCK*sizeof(u32))
 #define TIMER_INTERVAL_MS 1000
 #define ADDR_CLOCK_MODE_READ_REG 0x80
 #define MASK_CLOCK_MODE 0x3
@@ -102,7 +101,7 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->chip_free = generic_chip_free;
 	dev_specifics->detect_hw_presence = clara_detect_hw_presence;
 	dev_specifics->soft_reset = clara_soft_reset;
-	dev_specifics->irq_handler = dma_irq_handler;
+	dev_specifics->irq_handler = dma_ng_irq_handler;
 	dev_specifics->pcm_playback_ops = &playback_ops;
 	dev_specifics->pcm_capture_ops = &capture_ops;
 	dev_specifics->timer_callback = timer_callback;
@@ -124,12 +123,12 @@ struct snd_pcm_hardware const hw_caps = {
 	.channels_min = MIN_NUM_CHANNELS,
 	.channels_max = MAX_NUM_CHANNELS,
 	.buffer_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS *
-		NUM_PERIODS * MAX_NUM_CHANNELS,
+		DMA_NUM_PERIODS * MAX_NUM_CHANNELS,
 	.period_bytes_min = DMA_BLOCK_SIZE_BYTES * MIN_NUM_CHANNELS,
 	.period_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS *
 		MAX_NUM_CHANNELS,
-	.periods_min = NUM_PERIODS,
-	.periods_max = NUM_PERIODS,
+	.periods_min = DMA_NUM_PERIODS,
+	.periods_max = DMA_NUM_PERIODS,
 	.fifo_size = 0,
 };
 
@@ -177,30 +176,24 @@ static int pcm_open(struct snd_pcm_substream *substream)
 	substream->runtime->hw.channels_max = max_channels[cmode];
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		generic_clear_dma_buffer(&chip->playback_buf);
 		snd_pcm_set_runtime_buffer(substream, &chip->playback_buf);
 		chip->playback_substream = substream;
 	} else {
+		generic_clear_dma_buffer(&chip->capture_buf);
 		snd_pcm_set_runtime_buffer(substream, &chip->capture_buf);
 		chip->capture_substream = substream;
 	}
 	return 0;
 }
 
-static int pcm_playback_close(struct snd_pcm_substream *substream)
+static int pcm_close(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	snd_printk(KERN_DEBUG "pcm_playback_close\n");
-	chip->playback_substream = NULL;
-	snd_pcm_set_runtime_buffer(substream, NULL);
-	return 0;
-}
-
-static int pcm_capture_close(struct snd_pcm_substream *substream)
-{
-	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	snd_printk(KERN_DEBUG "pcm_capture_close\n");
-	chip->capture_substream = NULL;
-	snd_pcm_set_runtime_buffer(substream, NULL);
+	snd_printk(KERN_DEBUG "pcm_close\n");
+	if (chip->playback_substream == NULL &&
+		chip->capture_substream == NULL)
+		dma_ng_disable_interrupts(chip);
 	return 0;
 }
 
@@ -229,7 +222,22 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 
 static int pcm_hw_free(struct snd_pcm_substream *substream)
 {
-	snd_printk(KERN_DEBUG "pcm_hw_free\n");
+	struct generic_chip *chip = snd_pcm_substream_chip(substream);
+	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+		snd_printk(KERN_DEBUG "pcm_hw_free capture\n");
+		dma_ng_disable_channels(chip, false);
+		if (chip->playback_substream == NULL)
+			dma_ng_stop(chip);
+		chip->capture_substream = NULL;
+		snd_pcm_set_runtime_buffer(substream, NULL);
+	} else {
+		snd_printk(KERN_DEBUG "pcm_hw_free playback\n");
+		snd_pcm_set_runtime_buffer(substream, NULL);
+		dma_ng_disable_channels(chip, true);
+		if (chip->capture_substream == NULL)
+			dma_ng_stop(chip);
+		chip->playback_substream = NULL;
+	}
 	return 0;
 }
 
@@ -261,12 +269,12 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 		}
 	}
 
-	no_blocks = substream->runtime->period_size / 16 * 2;
+	no_blocks = substream->runtime->period_size /
+		DMA_SAMPLES_PER_BLOCK * DMA_NUM_PERIODS;
 	snd_printk(KERN_DEBUG "pcm_prepare: no_blocks: %d\n", no_blocks);
-	dma_ng_prepare(chip, channels,
+	return dma_ng_prepare(chip, channels,
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK),
 		base_addr, no_blocks);
-	return 0;
 }
 
 static int pcm_ioctl(struct snd_pcm_substream *substream,
@@ -285,14 +293,24 @@ static int pcm_ioctl(struct snd_pcm_substream *substream,
 
 static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
+	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
-		snd_printk(KERN_DEBUG "pcm_trigger: start\n");
-		dma_ng_start(snd_pcm_substream_chip(substream));
+		snd_printk(KERN_DEBUG "pcm_trigger: start %s\n",
+			substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
+			"playback" : "capture");
+		if (chip->dma_status != DMA_STATUS_RUNNING)
+			dma_ng_start(snd_pcm_substream_chip(substream));
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-		snd_printk(KERN_DEBUG "pcm_trigger: stop\n");
-		dma_ng_stop(snd_pcm_substream_chip(substream));
+		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			snd_printk(KERN_DEBUG "pcm_trigger: stop playback\n");
+			generic_clear_dma_buffer(&chip->playback_buf);
+		}
+		else {
+			snd_printk(KERN_DEBUG "pcm_trigger: stop capture\n");
+			generic_clear_dma_buffer(&chip->capture_buf);
+		}
 		break;
 	default:
 		return -EINVAL;
@@ -308,7 +326,7 @@ static snd_pcm_uframes_t pcm_pointer(struct snd_pcm_substream *substream)
 
 static struct snd_pcm_ops const playback_ops = {
 	.open = pcm_open,
-	.close = pcm_playback_close,
+	.close = pcm_close,
 	.ioctl = pcm_ioctl,
 	.hw_params = pcm_hw_params,
 	.hw_free = pcm_hw_free,
@@ -319,7 +337,7 @@ static struct snd_pcm_ops const playback_ops = {
 
 static struct snd_pcm_ops const capture_ops = {
 	.open = pcm_open,
-	.close = pcm_capture_close,
+	.close = pcm_close,
 	.ioctl = pcm_ioctl,
 	.hw_params = pcm_hw_params,
 	.hw_free = pcm_hw_free,
