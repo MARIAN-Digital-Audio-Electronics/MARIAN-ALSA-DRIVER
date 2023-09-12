@@ -98,8 +98,10 @@ void generic_chip_free(struct generic_chip *chip)
 		chip->irq = -1;
 		snd_printk(KERN_DEBUG "free_irq\n");
 	}
-	snd_dma_free_pages(&chip->playback_buf);
-	snd_dma_free_pages(&chip->capture_buf);
+	if (chip->playback_buf.area != NULL)
+		snd_dma_free_pages(&chip->playback_buf);
+	if (chip->capture_buf.area != NULL)
+		snd_dma_free_pages(&chip->capture_buf);
 	release_pci_resources(chip);
 	kfree(chip);
 	snd_printk(KERN_DEBUG "chip_free\n");
@@ -140,8 +142,6 @@ static int acquire_pci_resources(struct generic_chip *chip)
 		return -ENXIO;
 	}
 
-	generic_indicate_state(chip, STATE_SUCCESS);
-
 	snd_printk(KERN_DEBUG "acquire_pci_resources\n");
 	return 0;
 }
@@ -154,7 +154,6 @@ static void release_pci_resources(struct generic_chip *chip)
 	pci_clear_master(chip->pci_dev);
 
 	if (chip->bar0 != NULL) {
-		generic_indicate_state(chip, STATE_RESET);
 		iounmap(chip->bar0);
 		chip->bar0 = NULL;
 	}
@@ -216,7 +215,20 @@ int generic_pcm_ioctl(struct snd_pcm_substream *substream, unsigned int cmd,
 void generic_indicate_state(struct generic_chip *chip,
 	enum state_indicator state)
 {
-	write_reg32_bar0(chip, ADDR_LED_REG, state);
+	switch (state) {
+	case STATE_OFF:
+			write_reg32_bar0(chip, ADDR_LED_REG, 0b0);
+			break;
+	case STATE_SUCCESS:
+			write_reg32_bar0(chip, ADDR_LED_REG, 0b1);
+			break;
+	case STATE_FAILURE:
+			write_reg32_bar0(chip, ADDR_LED_REG, 0b10);
+			break;
+	case STATE_RESET:
+			write_reg32_bar0(chip, ADDR_LED_REG, 0b11);
+			break;
+	}
 }
 
 u32 generic_get_sample_counter(struct generic_chip *chip)

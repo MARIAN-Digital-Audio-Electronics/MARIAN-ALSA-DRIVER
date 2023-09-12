@@ -217,6 +217,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 
 	snd_printk(KERN_INFO "MARIAN driver probe: Initialized module for %s\n",
 		dev_specifics.card_name);
+	dev_specifics.indicate_state(chip, STATE_SUCCESS);
 	dev_idx++;
 	return 0;
 
@@ -225,24 +226,39 @@ static int driver_probe(struct pci_dev *pci_dev,
 // after calling snd_device_new() generic_chip_dev_free() is called implicitly
 // which in turn calls generic_chip_free()
 error_free_chip:
+	dev_specifics.indicate_state(chip, STATE_FAILURE);
 	generic_chip_free(chip);
+	chip = NULL;
+	card->private_data = NULL;
 error_free_card:
-	if (chip->timer_thread)
+	if (chip)
+		dev_specifics.indicate_state(chip, STATE_FAILURE);
+	if (chip && chip->timer_thread)
 		kthread_stop(chip->timer_thread);
 	snd_card_free(card);
+	pci_set_drvdata(pci_dev, NULL);
 	return err;
 }
 
 static void driver_remove(struct pci_dev *pci)
 {
 	struct snd_card *card = pci_get_drvdata(pci);
-	struct generic_chip *chip = card->private_data;
 	snd_printk(KERN_INFO
 		"MARIAN driver remove: Device id: 0x%4x, revision: %02d\n",
 		pci->device, pci->revision);
-	kthread_stop(chip->timer_thread);
-	snd_card_free(card);
-	pci_set_drvdata(pci, NULL);
+	if (!card)
+		return;
+	else {
+		struct generic_chip *chip = card->private_data;
+		// try generic indication since we do not have access to the
+		// device specific functions anymore
+		if (chip)
+			generic_indicate_state(chip, STATE_RESET);
+		if (chip && chip->timer_thread)
+			kthread_stop(chip->timer_thread);
+		snd_card_free(card);
+		pci_set_drvdata(pci, NULL);
+	}
 }
 
 static struct pci_device_id pci_ids[] = {
