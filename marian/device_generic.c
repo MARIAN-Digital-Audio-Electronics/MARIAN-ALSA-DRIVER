@@ -189,10 +189,7 @@ int generic_dma_channel_offset(struct snd_pcm_substream *substream,
 	info->offset = 0;
 	info->step = 32;
 	switch (alignment) {
-	case SNDRV_PCM_FMTBIT_S24_3LE:
-		info->first = channel * chip->num_buffer_frames *
-			sizeof(u32) * 8 + 8;
-		break;
+	case SNDRV_PCM_FMTBIT_S24_3LE: // fall through
 	case SNDRV_PCM_FMTBIT_S32_LE:
 		info->first = channel * chip->num_buffer_frames *
 			sizeof(u32) * 8;
