@@ -26,6 +26,7 @@ typedef bool (*detect_hw_presence_func)(struct generic_chip *chip);
 typedef void (*soft_reset_func)(struct generic_chip *chip);
 typedef int (*create_controls_func)(struct generic_chip *chip);
 typedef void (*indicate_state_func)(struct generic_chip *chip, enum state_indicator state);
+typedef int (*alloc_dma_buffers_func)(struct pci_dev *pci_dev, struct generic_chip *chip);
 
 /* This structure holds the device specific functions
 	and descriptors that can only be determined at runtime.
@@ -45,6 +46,7 @@ struct device_specifics {
 	detect_hw_presence_func detect_hw_presence;
 	soft_reset_func soft_reset;
 	indicate_state_func indicate_state;
+	alloc_dma_buffers_func alloc_dma_buffers;
 	irq_handler_t irq_handler;
 	struct snd_pcm_ops const *pcm_playback_ops;
 	struct snd_pcm_ops const *pcm_capture_ops;

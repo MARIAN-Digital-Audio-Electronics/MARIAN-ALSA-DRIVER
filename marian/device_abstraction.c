@@ -15,6 +15,7 @@ void clear_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->detect_hw_presence = NULL;
 	dev_specifics->soft_reset = NULL;
 	dev_specifics->indicate_state = NULL;
+	dev_specifics->alloc_dma_buffers = NULL;
 	dev_specifics->irq_handler = NULL;
 	dev_specifics->pcm_playback_ops = NULL;
 	dev_specifics->pcm_capture_ops = NULL;
@@ -69,6 +70,11 @@ bool verify_device_specifics(struct device_specifics *dev_specifics)
 	if (dev_specifics->indicate_state == NULL) {
 		snd_printk(KERN_ERR
 			"verify_device_specifics: indicate_state is NULL\n");
+		valid = false;
+	}
+	if (dev_specifics->alloc_dma_buffers == NULL) {
+		snd_printk(KERN_ERR
+			"verify_device_specifics: alloc_dma_buffers is NULL\n");
 		valid = false;
 	}
 	if (dev_specifics->irq_handler == NULL) {

@@ -1,5 +1,6 @@
 // TODO ToG: Add license header
 
+#include <linux/pci.h>
 #include "device_generic.h"
 #include "clara.h"
 
@@ -119,6 +120,36 @@ bool clara_detect_hw_presence(struct generic_chip *chip)
 void clara_soft_reset(struct generic_chip *chip)
 {
 	// TODO ToG: reset IRQs / DMA engine
+}
+
+int clara_alloc_dma_buffers(struct pci_dev *pci_dev,
+	struct generic_chip *chip,
+	size_t playback_size, size_t capture_size)
+{
+	struct snd_dma_buffer tmp_buf;
+	if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
+		capture_size, &tmp_buf) == 0) {
+		snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
+		snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
+		snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
+		chip->capture_buf = tmp_buf;
+	} else {
+		snd_printk(KERN_ERR
+			"snd_dma_alloc_dir_pages failed (capture)\n");
+		return -ENOMEM;
+	}
+	if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
+		playback_size, &tmp_buf) == 0) {
+		snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
+		snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
+		snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
+		chip->playback_buf = tmp_buf;
+	} else {
+		snd_printk(KERN_ERR
+			"snd_dma_alloc_dir_pages failed (playback)\n");
+		return -ENOMEM;
+	}
+	return 0;
 }
 
 void clara_timer_callback(struct generic_chip *chip)

@@ -2,6 +2,7 @@
 
 #include <linux/types.h>
 #include <linux/delay.h>
+#include <linux/pci.h>
 #include <sound/pcm.h>
 #include <sound/control.h>
 #include <sound/pcm_params.h>
@@ -56,7 +57,7 @@ static void chip_free(struct generic_chip *chip)
 	kfree(clara_e_chip);
 	clara_chip->specific = NULL;
 	clara_chip->specific_free = NULL;
-};
+}
 
 static int chip_new(struct snd_card *card,
 	struct pci_dev *pci_dev,
@@ -88,7 +89,15 @@ static int chip_new(struct snd_card *card,
 	// error:
 	// kfree(clara_e_chip);
 	// return err;
-};
+}
+
+static int alloc_dma_buffers(struct pci_dev *pci_dev,
+	struct generic_chip *chip)
+{
+	return clara_alloc_dma_buffers(pci_dev, chip,
+		DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * MAX_NUM_CHANNELS,
+		DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * MAX_NUM_CHANNELS);
+}
 
 void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 {
@@ -102,6 +111,7 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->detect_hw_presence = clara_detect_hw_presence;
 	dev_specifics->soft_reset = clara_soft_reset;
 	dev_specifics->indicate_state = generic_indicate_state;
+	dev_specifics->alloc_dma_buffers = alloc_dma_buffers;
 	dev_specifics->irq_handler = dma_ng_irq_handler;
 	dev_specifics->pcm_playback_ops = &playback_ops;
 	dev_specifics->pcm_capture_ops = &capture_ops;

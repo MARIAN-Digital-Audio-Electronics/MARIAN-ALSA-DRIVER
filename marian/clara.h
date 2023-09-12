@@ -19,6 +19,9 @@ struct clara_chip {
 int clara_chip_new(struct snd_card *card,
 	struct pci_dev *pci_dev,
 	struct generic_chip **rchip);
+int clara_alloc_dma_buffers(struct pci_dev *pci_dev,
+	struct generic_chip *chip,
+	size_t playback_size, size_t capture_size);
 bool clara_detect_hw_presence(struct generic_chip *chip);
 /* Resets all relevant registers to default values mainly
  * to avoid spurious interrupts. */

@@ -146,42 +146,15 @@ static int driver_probe(struct pci_dev *pci_dev,
 	if (err < 0)
 		goto error_free_card;
 
+	if (dev_specifics.alloc_dma_buffers(pci_dev, chip) < 0) {
+		snd_printk(KERN_ERR
+			"failed to allocate DMA buffers\n");
+		err = -ENOMEM;
+		goto error_free_card;
+	}
+
 	{ // create a PCM device
-		// TODO ToG: this has to go somewhere device specific
-		// to make the number of substreams variable according
-		// to the DMA implementation
 		struct snd_pcm *pcm;
-		struct snd_dma_buffer tmp_buf;
-
-		// TODO ToG: move this into a specific part since it is not
-		// compatible with the Seraph series
-		if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
-			16 * 4 * 512 * 128, &tmp_buf) == 0) {
-			snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
-			snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
-			snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
-			chip->capture_buf = tmp_buf;
-		}
-		else {
-			snd_printk(KERN_ERR
-				"snd_dma_alloc_dir_pages failed (capture)\n");
-			err = -ENOMEM;
-			goto error_free_card;
-		}
-		if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, &pci_dev->dev,
-			16 * 4 * 512 * 128, &tmp_buf) == 0) {
-			snd_printk(KERN_DEBUG "area = 0x%p\n", tmp_buf.area);
-			snd_printk(KERN_DEBUG "addr = 0x%llu\n", tmp_buf.addr);
-			snd_printk(KERN_DEBUG "bytes = %zu\n", tmp_buf.bytes);
-			chip->playback_buf = tmp_buf;
-		}
-		else {
-			snd_printk(KERN_ERR
-				"snd_dma_alloc_dir_pages failed (playback)\n");
-			err = -ENOMEM;
-			goto error_free_card;
-		}
-
 		err = snd_pcm_new(card, card->shortname, 0, 1, 1, &pcm);
 		if (err < 0)
 			goto error_free_card;
