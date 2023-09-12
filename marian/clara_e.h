@@ -6,8 +6,8 @@
 #define CLARA_E_DEVICE_ID 0x9050
 
 // revisions this driver is able to handle
-#define CLARA_E_MIN_HW_REVISION 0x05
-#define CLARA_E_MAX_HW_REVISION 0x05
+#define CLARA_E_MIN_HW_REVISION 0x06
+#define CLARA_E_MAX_HW_REVISION 0x06
 
 #define CLARA_E_CARD_NAME "ClaraE"
 
