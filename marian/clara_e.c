@@ -171,7 +171,6 @@ static int pcm_open(struct snd_pcm_substream *substream)
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	enum clock_mode cmode =
 		generic_sample_rate_to_clock_mode(substream->runtime->rate);
-	snd_printk(KERN_INFO "pcm_playback_open\n");
 	snd_pcm_set_sync(substream);
 	snd_pcm_hw_constraint_list(substream->runtime, 0,
 		SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
@@ -187,10 +186,12 @@ static int pcm_open(struct snd_pcm_substream *substream)
 	substream->runtime->hw.channels_max = max_channels[cmode];
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		snd_printk(KERN_INFO "pcm_playback_open\n");
 		generic_clear_dma_buffer(&chip->playback_buf);
 		snd_pcm_set_runtime_buffer(substream, &chip->playback_buf);
 		chip->playback_substream = substream;
 	} else {
+		snd_printk(KERN_INFO "pcm_capture_open\n");
 		generic_clear_dma_buffer(&chip->capture_buf);
 		snd_pcm_set_runtime_buffer(substream, &chip->capture_buf);
 		chip->capture_substream = substream;
