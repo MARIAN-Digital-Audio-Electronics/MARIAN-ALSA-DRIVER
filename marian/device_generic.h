@@ -42,12 +42,15 @@ struct generic_chip {
 	unsigned long bar0_addr;
 	void __iomem *bar0;
 	struct snd_pcm *pcm;
+	// used in critical sections start
+	spinlock_t lock;
 	struct snd_pcm_substream *playback_substream;
 	struct snd_pcm_substream *capture_substream;
 	enum dma_status dma_status;
+	unsigned int num_buffer_frames;
+	// used in critical sections end
 	struct snd_dma_buffer playback_buf;
 	struct snd_dma_buffer capture_buf;
-	unsigned int num_buffer_frames;
 	struct task_struct *timer_thread;
 	timer_callback_func timer_callback;
 	unsigned long timer_interval_ms;

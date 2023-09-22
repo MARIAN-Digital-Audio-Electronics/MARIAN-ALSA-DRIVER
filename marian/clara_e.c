@@ -188,24 +188,25 @@ static int pcm_open(struct snd_pcm_substream *substream)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		snd_printk(KERN_INFO "pcm_playback_open\n");
 		generic_clear_dma_buffer(&chip->playback_buf);
+		spin_lock_irq(&chip->lock);
 		snd_pcm_set_runtime_buffer(substream, &chip->playback_buf);
 		chip->playback_substream = substream;
+		spin_unlock_irq(&chip->lock);
 	} else {
 		snd_printk(KERN_INFO "pcm_capture_open\n");
 		generic_clear_dma_buffer(&chip->capture_buf);
+		spin_lock_irq(&chip->lock);
 		snd_pcm_set_runtime_buffer(substream, &chip->capture_buf);
 		chip->capture_substream = substream;
+		spin_unlock_irq(&chip->lock);
 	}
 	return 0;
 }
 
 static int pcm_close(struct snd_pcm_substream *substream)
 {
-	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	snd_printk(KERN_DEBUG "pcm_close\n");
-	if (chip->playback_substream == NULL &&
-		chip->capture_substream == NULL)
-		dma_ng_disable_interrupts(chip);
+	snd_pcm_set_runtime_buffer(substream, NULL);
 	return 0;
 }
 
@@ -215,6 +216,8 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 
 	snd_printk(KERN_DEBUG "pcm_hw_params\n");
+	snd_printk(KERN_DEBUG "  sample rate: %d\n",
+		params_rate(hw_params));
 	snd_printk(KERN_DEBUG "  buffer bytes: %d\n",
 		params_buffer_bytes(hw_params));
 	snd_printk(KERN_DEBUG "  buffer size : %d\n",
@@ -228,28 +231,55 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 	snd_printk(KERN_DEBUG "  channels    : %d\n",
 		params_channels(hw_params));
 
-	chip->num_buffer_frames = params_buffer_size(hw_params);
+	spin_lock_irq(&chip->lock);
+	{	// this is certainly CLARA E specific
+		// other cards could adapt if not synced externally
+		unsigned int current_rate =
+			atomic_read(&chip->current_sample_rate);
+		if (params_rate(hw_params) != current_rate) {
+			spin_unlock_irq(&chip->lock);
+			snd_printk(KERN_ERR
+				"pcm_hw_params: sample rate mismatch. "
+				"requested: %d, current: %d\n",
+				substream->runtime->rate, current_rate);
+			return -EINVAL;
+		}
+	}
+
+	{
+		// this is in number of samples per channel
+		int num_frames = params_buffer_size(hw_params);
+		if (chip->num_buffer_frames != 0 &&
+			chip->num_buffer_frames != num_frames) {
+			spin_unlock_irq(&chip->lock);
+			snd_printk(KERN_ERR "pcm_hw_params: "
+				"buffer size changed from %d to %d\n",
+				chip->num_buffer_frames, num_frames);
+			return -EBUSY;
+
+		}
+		chip->num_buffer_frames = num_frames;
+	}
+	spin_unlock_irq(&chip->lock);
 	return 0;
 }
 
 static int pcm_hw_free(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-		snd_printk(KERN_DEBUG "pcm_hw_free capture\n");
-		dma_ng_disable_channels(chip, false);
-		if (chip->playback_substream == NULL)
-			dma_ng_stop(chip);
-		chip->capture_substream = NULL;
-		snd_pcm_set_runtime_buffer(substream, NULL);
-	} else {
-		snd_printk(KERN_DEBUG "pcm_hw_free playback\n");
-		snd_pcm_set_runtime_buffer(substream, NULL);
-		dma_ng_disable_channels(chip, true);
-		if (chip->capture_substream == NULL)
-			dma_ng_stop(chip);
+
+	spin_lock_irq(&chip->lock);
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		chip->playback_substream = NULL;
+	else
+		chip->capture_substream = NULL;
+	if (chip->playback_substream == NULL &&
+		chip->capture_substream == NULL) {
+		dma_ng_stop(chip);
+		dma_ng_disable_interrupts(chip);
+		chip->num_buffer_frames = 0;
 	}
+	spin_unlock_irq(&chip->lock);
 	return 0;
 }
 
@@ -259,6 +289,7 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 	u64 base_addr = substream->runtime->dma_addr;
 	unsigned int channels = substream->runtime->channels;
 	unsigned int no_blocks = 0;
+	int err = 0;
 	snd_printk(KERN_DEBUG "pcm_prepare\n");
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
@@ -270,23 +301,23 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 			(void *)base_addr);
 	}
 
-	{
-		unsigned int current_rate =
-			atomic_read(&chip->current_sample_rate);
-		if (substream->runtime->rate != current_rate) {
-			snd_printk(KERN_WARNING
-				"pcm_playback_open: sample rate mismatch. "
-				"requested: %d, Dante: %d\n",
-				substream->runtime->rate, current_rate);
-		}
-	}
-
+	spin_lock_irq(&chip->lock);
 	no_blocks = substream->runtime->period_size /
 		DMA_SAMPLES_PER_BLOCK * DMA_NUM_PERIODS;
-	snd_printk(KERN_DEBUG "pcm_prepare: no_blocks: %d\n", no_blocks);
-	return dma_ng_prepare(chip, channels,
+	if (chip->num_buffer_frames != no_blocks * DMA_SAMPLES_PER_BLOCK) {
+		spin_unlock_irq(&chip->lock);
+		snd_printk(KERN_ERR "pcm_prepare: "
+			"buffer size changed from %d to %d\n",
+			chip->num_buffer_frames,
+			no_blocks * DMA_SAMPLES_PER_BLOCK);
+		return -EBUSY;
+	}
+	err = dma_ng_prepare(chip, channels,
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK),
 		base_addr, no_blocks);
+	spin_unlock_irq(&chip->lock);
+	snd_printk(KERN_DEBUG "pcm_prepare: no_blocks: %d\n", no_blocks);
+	return err;
 }
 
 static int pcm_ioctl(struct snd_pcm_substream *substream,
@@ -311,17 +342,30 @@ static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		snd_printk(KERN_DEBUG "pcm_trigger: start %s\n",
 			substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
 			"playback" : "capture");
+		spin_lock_irq(&chip->lock);
 		if (chip->dma_status != DMA_STATUS_RUNNING)
 			dma_ng_start(snd_pcm_substream_chip(substream));
+		spin_unlock_irq(&chip->lock);
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
-		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-			snd_printk(KERN_DEBUG "pcm_trigger: stop playback\n");
-			generic_clear_dma_buffer(&chip->playback_buf);
-		}
-		else {
+		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 			snd_printk(KERN_DEBUG "pcm_trigger: stop capture\n");
 			generic_clear_dma_buffer(&chip->capture_buf);
+			dma_ng_disable_channels(chip, false);
+			spin_lock_irq(&chip->lock);
+			if (chip->playback_substream == NULL) {
+				dma_ng_stop(chip);
+			}
+			spin_unlock_irq(&chip->lock);
+		} else {
+			snd_printk(KERN_DEBUG "pcm_trigger: stop playback\n");
+			generic_clear_dma_buffer(&chip->playback_buf);
+			dma_ng_disable_channels(chip, true);
+			spin_lock_irq(&chip->lock);
+			if (chip->capture_substream == NULL) {
+				dma_ng_stop(chip);
+			}
+			spin_unlock_irq(&chip->lock);
 		}
 		break;
 	default:

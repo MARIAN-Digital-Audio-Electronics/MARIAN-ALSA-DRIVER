@@ -89,8 +89,7 @@ int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 	u32 channel_enables[NUM_CHANNEL_ENABLE_REGS] = {0};
 	int i = 0;
 
-	// TODO ToG: either make dependent on playback/capture already
-	// running or move to another place altogether
+	// the caller needs to make sure that this runs in a critical section
 	if (chip->dma_status != DMA_STATUS_RUNNING)
 		if (reset_engine(chip) < 0)
 			return -EIO;

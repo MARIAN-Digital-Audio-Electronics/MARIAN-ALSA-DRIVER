@@ -68,6 +68,7 @@ int generic_chip_new(struct snd_card *card,
 	chip->timer_interval_ms = 0;
 	chip->specific = NULL;
 	chip->specific_free = NULL;
+	spin_lock_init(&chip->lock);
 	atomic_set(&chip->current_sample_rate, 0);
 	atomic_set(&chip->clock_mode, CLOCK_MODE_48);
 	atomic_set(&chip->ctl_id_sample_rate, 0);
