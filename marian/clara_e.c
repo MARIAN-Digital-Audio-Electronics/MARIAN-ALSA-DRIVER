@@ -170,8 +170,10 @@ static const u16 max_channels[] = {512, 256, 128};
 static int pcm_open(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	enum clock_mode cmode =
-		generic_sample_rate_to_clock_mode(substream->runtime->rate);
+	unsigned int const current_rate =
+		atomic_read(&chip->current_sample_rate);
+	enum clock_mode const cmode =
+		generic_sample_rate_to_clock_mode(current_rate);
 	snd_pcm_set_sync(substream);
 	snd_pcm_hw_constraint_list(substream->runtime, 0,
 		SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
@@ -179,10 +181,8 @@ static int pcm_open(struct snd_pcm_substream *substream)
 	substream->runtime->hw = hw_caps;
 
 	// since Dante is the clock master, the sample rate is fixed
-	substream->runtime->hw.rate_min =
-		atomic_read(&chip->current_sample_rate);
-	substream->runtime->hw.rate_max =
-		atomic_read(&chip->current_sample_rate);
+	substream->runtime->hw.rate_min = current_rate;
+	substream->runtime->hw.rate_max = current_rate;
 	// overwrite clock mode dependant values
 	substream->runtime->hw.channels_max = max_channels[cmode];
 
