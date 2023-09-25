@@ -6,6 +6,7 @@
 #include <linux/atomic.h>
 #include <sound/core.h>
 #include <sound/control.h>
+#include "dbg_out.h"
 #include "device_generic.h"
 
 #define ADDR_IRQ_STATUS_REG 0x00
@@ -78,7 +79,7 @@ int generic_chip_new(struct snd_card *card,
 		goto error;
 
 	*rchip = chip;
-	snd_printk(KERN_DEBUG "generic_chip_new: success\n");
+	PRINT_DEBUG("generic_chip_new: success\n");
 	return 0;
 
 error:
@@ -97,7 +98,7 @@ void generic_chip_free(struct generic_chip *chip)
 	if (chip->irq) {
 		free_irq(chip->irq, chip);
 		chip->irq = -1;
-		snd_printk(KERN_DEBUG "free_irq\n");
+		PRINT_DEBUG("free_irq\n");
 	}
 	if (chip->playback_buf.area != NULL)
 		snd_dma_free_pages(&chip->playback_buf);
@@ -105,7 +106,7 @@ void generic_chip_free(struct generic_chip *chip)
 		snd_dma_free_pages(&chip->capture_buf);
 	release_pci_resources(chip);
 	kfree(chip);
-	snd_printk(KERN_DEBUG "chip_free\n");
+	PRINT_DEBUG("chip_free\n");
 }
 
 static int acquire_pci_resources(struct generic_chip *chip)
@@ -125,7 +126,7 @@ static int acquire_pci_resources(struct generic_chip *chip)
 		dma_set_coherent_mask(&chip->pci_dev->dev, DMA_BIT_MASK(32));
 	}
 	else {
-		snd_printk(KERN_ERR "No suitable DMA possible.\n");
+		PRINT_ERROR("No suitable DMA possible.\n");
 		return -EINVAL;
 	}
 	pci_set_master(chip->pci_dev);
@@ -139,11 +140,11 @@ static int acquire_pci_resources(struct generic_chip *chip)
 	chip->bar0 =
 		ioremap(chip->bar0_addr, pci_resource_len(chip->pci_dev, 0));
 	if (chip->bar0 == NULL) {
-		snd_printk(KERN_ERR "BAR0: ioremap error\n");
+		PRINT_ERROR("BAR0: ioremap error\n");
 		return -ENXIO;
 	}
 
-	snd_printk(KERN_DEBUG "acquire_pci_resources\n");
+	PRINT_DEBUG("acquire_pci_resources\n");
 	return 0;
 }
 
@@ -166,7 +167,7 @@ static void release_pci_resources(struct generic_chip *chip)
 
 	pci_disable_device(chip->pci_dev);
 
-	snd_printk(KERN_DEBUG "release_pci_resources\n");
+	PRINT_DEBUG("release_pci_resources\n");
 }
 
 void generic_clear_dma_buffer(struct snd_dma_buffer *buf)
@@ -198,7 +199,7 @@ int generic_dma_channel_offset(struct snd_pcm_substream *substream,
 	default:
 		return -EINVAL;
 	}
-	snd_printk(KERN_DEBUG "generic_dma_channel_offset: channel: %d, "
+	PRINT_DEBUG("generic_dma_channel_offset: channel: %d, "
 		"offset: %d\n", channel, info->first/8);
 	return 0;
 }
@@ -309,10 +310,10 @@ void generic_timer_callback(struct generic_chip *chip)
 		if (kctl != NULL) {
 			snd_ctl_notify(chip->card, SNDRV_CTL_EVENT_MASK_VALUE,
 				&kctl->id);
-			snd_printk(KERN_INFO "timer_callback: "
+			PRINT_DEBUG("timer_callback: "
 				"notified sample rate change\n");
 		}
-		snd_printk(KERN_INFO "timer_callback: new sample rate: %d\n",
+		PRINT_INFO("timer_callback: new sample rate: %d\n",
 			new_rate);
 
 	}

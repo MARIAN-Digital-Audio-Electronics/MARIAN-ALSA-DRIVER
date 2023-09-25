@@ -6,6 +6,7 @@
 #include <sound/pcm.h>
 #include <sound/control.h>
 #include <sound/pcm_params.h>
+#include "dbg_out.h"
 #include "device_abstraction.h"
 #include "device_generic.h"
 #include "clara.h"
@@ -186,14 +187,14 @@ static int pcm_open(struct snd_pcm_substream *substream)
 	substream->runtime->hw.channels_max = max_channels[cmode];
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		snd_printk(KERN_INFO "pcm_playback_open\n");
+		PRINT_DEBUG("pcm_playback_open\n");
 		generic_clear_dma_buffer(&chip->playback_buf);
 		spin_lock_irq(&chip->lock);
 		snd_pcm_set_runtime_buffer(substream, &chip->playback_buf);
 		chip->playback_substream = substream;
 		spin_unlock_irq(&chip->lock);
 	} else {
-		snd_printk(KERN_INFO "pcm_capture_open\n");
+		PRINT_DEBUG("pcm_capture_open\n");
 		generic_clear_dma_buffer(&chip->capture_buf);
 		spin_lock_irq(&chip->lock);
 		snd_pcm_set_runtime_buffer(substream, &chip->capture_buf);
@@ -205,7 +206,7 @@ static int pcm_open(struct snd_pcm_substream *substream)
 
 static int pcm_close(struct snd_pcm_substream *substream)
 {
-	snd_printk(KERN_DEBUG "pcm_close\n");
+	PRINT_DEBUG("pcm_close\n");
 	snd_pcm_set_runtime_buffer(substream, NULL);
 	return 0;
 }
@@ -215,20 +216,20 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 
-	snd_printk(KERN_DEBUG "pcm_hw_params\n");
-	snd_printk(KERN_DEBUG "  sample rate: %d\n",
+	PRINT_DEBUG("pcm_hw_params\n");
+	PRINT_DEBUG("  sample rate: %d\n",
 		params_rate(hw_params));
-	snd_printk(KERN_DEBUG "  buffer bytes: %d\n",
+	PRINT_DEBUG("  buffer bytes: %d\n",
 		params_buffer_bytes(hw_params));
-	snd_printk(KERN_DEBUG "  buffer size : %d\n",
+	PRINT_DEBUG("  buffer size : %d\n",
 		params_buffer_size(hw_params));
-	snd_printk(KERN_DEBUG "  period bytes: %d\n",
+	PRINT_DEBUG("  period bytes: %d\n",
 		params_period_bytes(hw_params));
-	snd_printk(KERN_DEBUG "  period size : %d\n",
+	PRINT_DEBUG("  period size : %d\n",
 		params_period_size(hw_params));
-	snd_printk(KERN_DEBUG "  periods     : %d\n",
+	PRINT_DEBUG("  periods     : %d\n",
 		params_periods(hw_params));
-	snd_printk(KERN_DEBUG "  channels    : %d\n",
+	PRINT_DEBUG("  channels    : %d\n",
 		params_channels(hw_params));
 
 	spin_lock_irq(&chip->lock);
@@ -238,7 +239,7 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 			atomic_read(&chip->current_sample_rate);
 		if (params_rate(hw_params) != current_rate) {
 			spin_unlock_irq(&chip->lock);
-			snd_printk(KERN_ERR
+			PRINT_ERROR(
 				"pcm_hw_params: sample rate mismatch. "
 				"requested: %d, current: %d\n",
 				substream->runtime->rate, current_rate);
@@ -252,7 +253,7 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 		if (chip->num_buffer_frames != 0 &&
 			chip->num_buffer_frames != num_frames) {
 			spin_unlock_irq(&chip->lock);
-			snd_printk(KERN_ERR "pcm_hw_params: "
+			PRINT_ERROR("pcm_hw_params: "
 				"buffer size changed from %d to %d\n",
 				chip->num_buffer_frames, num_frames);
 			return -EBUSY;
@@ -290,14 +291,14 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 	unsigned int channels = substream->runtime->channels;
 	unsigned int no_blocks = 0;
 	int err = 0;
-	snd_printk(KERN_DEBUG "pcm_prepare\n");
+	PRINT_DEBUG("pcm_prepare\n");
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		snd_printk(KERN_DEBUG "pcm_prepare: playback base: %p\n",
+		PRINT_DEBUG("pcm_prepare: playback base: %p\n",
 			(void *)base_addr);
 	}
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-		snd_printk(KERN_DEBUG "pcm_prepare: capture base: %p\n",
+		PRINT_DEBUG("pcm_prepare: capture base: %p\n",
 			(void *)base_addr);
 	}
 
@@ -306,7 +307,7 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 		DMA_SAMPLES_PER_BLOCK * DMA_NUM_PERIODS;
 	if (chip->num_buffer_frames != no_blocks * DMA_SAMPLES_PER_BLOCK) {
 		spin_unlock_irq(&chip->lock);
-		snd_printk(KERN_ERR "pcm_prepare: "
+		PRINT_ERROR("pcm_prepare: "
 			"buffer size changed from %d to %d\n",
 			chip->num_buffer_frames,
 			no_blocks * DMA_SAMPLES_PER_BLOCK);
@@ -316,7 +317,7 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK),
 		base_addr, no_blocks);
 	spin_unlock_irq(&chip->lock);
-	snd_printk(KERN_DEBUG "pcm_prepare: no_blocks: %d\n", no_blocks);
+	PRINT_DEBUG("pcm_prepare: no_blocks: %d\n", no_blocks);
 	return err;
 }
 
@@ -339,7 +340,7 @@ static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
-		snd_printk(KERN_DEBUG "pcm_trigger: start %s\n",
+		PRINT_DEBUG("pcm_trigger: start %s\n",
 			substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
 			"playback" : "capture");
 		spin_lock_irq(&chip->lock);
@@ -349,16 +350,16 @@ static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
-			snd_printk(KERN_DEBUG "pcm_trigger: stop capture\n");
-			generic_clear_dma_buffer(&chip->capture_buf);
-			dma_ng_disable_channels(chip, false);
+			PRINT_DEBUG("pcm_trigger: stop capture\n");
 			spin_lock_irq(&chip->lock);
 			if (chip->playback_substream == NULL) {
 				dma_ng_stop(chip);
 			}
 			spin_unlock_irq(&chip->lock);
+			dma_ng_disable_channels(chip, false);
+			generic_clear_dma_buffer(&chip->capture_buf);
 		} else {
-			snd_printk(KERN_DEBUG "pcm_trigger: stop playback\n");
+			PRINT_DEBUG("pcm_trigger: stop playback\n");
 			generic_clear_dma_buffer(&chip->playback_buf);
 			dma_ng_disable_channels(chip, true);
 			spin_lock_irq(&chip->lock);
@@ -434,8 +435,7 @@ static enum clock_mode get_clock_mode(struct generic_chip *chip)
 		cmode = CLOCK_MODE_192;
 		break;
 	default:
-		snd_printk(KERN_ERR "get_clock_mode: invalid clock mode: %d\n",
-			reg);
+		PRINT_ERROR("get_clock_mode: invalid clock mode: %d\n", reg);
 		break;
 	}
 	return cmode;

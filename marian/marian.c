@@ -11,6 +11,8 @@
 #include <sound/memalloc.h>
 #include <sound/initval.h>
 #include <sound/pcm.h>
+#include "version.h"
+#include "dbg_out.h"
 #include "marian.h"
 
 MODULE_AUTHOR("Tobias Groß <theguy@audio-fpga.com>");
@@ -40,7 +42,7 @@ static int timer_thread_func(void *data)
 	struct generic_chip *chip = data;
 	long int start = 0;
 	long int end = 0;
-	snd_printk(KERN_DEBUG "timer thread started\n");
+	PRINT_DEBUG("timer thread started\n");
 	while(!kthread_should_stop()) {
 		start = jiffies;
 		chip->timer_callback(chip);
@@ -48,7 +50,7 @@ static int timer_thread_func(void *data)
 		msleep(max((signed long)(chip->timer_interval_ms) -
 			jiffies_to_msecs(end - start), (signed long)1));
 	}
-	snd_printk(KERN_DEBUG "timer thread stopped\n");
+	PRINT_DEBUG("timer thread stopped\n");
 	return 0;
 }
 
@@ -72,6 +74,8 @@ static int driver_probe(struct pci_dev *pci_dev,
 		return -ENOENT;
 	}
 
+	snd_printk(KERN_INFO "MARIAN driver probe: Driver version: %s\n",
+		MARIAN_DRIVER_VERSION_STRING);
 	snd_printk(KERN_INFO "MARIAN driver probe: Device id: 0x%4x, "
 		"revision: %02d\n", pci_id->device, pci_dev->revision);
 
@@ -139,7 +143,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 	}
 	chip->irq = chip->pci_dev->irq;
 	card->sync_irq = chip->irq;
-	snd_printk(KERN_DEBUG "MARIAN driver probe: IRQ: %d\n", chip->irq);
+	PRINT_DEBUG("MARIAN driver probe: IRQ: %d\n", chip->irq);
 
 	// create a sound device
 	err = snd_device_new(card, SNDRV_DEV_LOWLEVEL, chip, &ops);

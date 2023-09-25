@@ -1,6 +1,7 @@
 // TODO ToG: Add license header
 
 #include <linux/irqreturn.h>
+#include "dbg_out.h"
 #include "clara.h"
 #include "dma_ng.h"
 
@@ -39,7 +40,7 @@ static int enable_interrupts(struct generic_chip *chip)
 	// enable capture interrupts (besides the prepare IRQ the only one
 	// we are interested in)
 	// since at the moment we have no shadow registers, we need to
-	// take care of the DMA loopback as well whiche is located in the
+	// take care of the DMA loopback as well which is located in the
 	// same register
 	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG,
 		0xFFFFFFFF & ~(MASK_IRQ_DMA_LOOPBACK | MASK_IRQ_DISABLE_CAPTURE));
@@ -62,21 +63,21 @@ static int reset_engine(struct generic_chip *chip)
 {
 	u32 val = 0;
 	int retries = 5;
-	printk(KERN_DEBUG "reset_engine");
+	PRINT_DEBUG("reset_engine");
 	write_reg32_bar0(chip, ADDR_PREPARE_RUN_REG, 0);
 
 	while (retries-- > 0) {
 		val = generic_get_irq_status(chip);
 		if (val & MASK_STATUS_IDLE) {
 			chip->dma_status = DMA_STATUS_IDLE;
-			snd_printk(KERN_DEBUG "reset_engine: "
+			PRINT_DEBUG("reset_engine: "
 				"%d tries", 5 - retries);
 			return 0;
 		}
 		write_reg32_bar0(chip, ADDR_RESET_DMA_ENGINE_REG, 0);
 	}
 
-	printk(KERN_ERR "reset_engine: machine not idle after "
+	PRINT_ERROR("reset_engine: machine not idle after "
 		"reset: 0x%08X\n", val);
 	chip->dma_status = DMA_STATUS_UNKNOWN;
 	return -EIO;
@@ -162,7 +163,7 @@ irqreturn_t dma_ng_irq_handler(int irq, void *dev_id)
 	if (val == 0)
 		return IRQ_NONE;
 	if (val & MASK_IRQ_STATUS_PREPARED) {
-		snd_printk(KERN_DEBUG "dma_ng_irq_handler: prepare IRQ\n");
+		PRINT_DEBUG("dma_ng_irq_handler: prepare IRQ\n");
 	}
 	if (val & MASK_IRQ_STATUS_CAPTURE) {
 		if (chip->playback_substream)
@@ -172,7 +173,7 @@ irqreturn_t dma_ng_irq_handler(int irq, void *dev_id)
 	}
 	if (!chip->playback_substream && !chip->capture_substream) {
 		dma_ng_disable_interrupts(chip);
-		snd_printk(KERN_ERR "dma_ng_irq_handler: caught dangling IRQ\n");
+		PRINT_ERROR("dma_ng_irq_handler: caught dangling IRQ\n");
 	}
 	return IRQ_HANDLED;
 }
