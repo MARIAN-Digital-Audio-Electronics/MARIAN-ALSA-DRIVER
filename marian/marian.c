@@ -1,4 +1,19 @@
-// TODO ToG: Add license header
+/*
+ * MARIAN PCIe soundcards ALSA driver
+ *
+ * Author: Tobias Groß <theguy@audio-fpga.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details at:
+ * http://www.gnu.org/licenses/gpl-2.0.html
+ */
 
 
 #include <linux/module.h>
@@ -17,7 +32,7 @@
 
 MODULE_AUTHOR("Tobias Groß <theguy@audio-fpga.com>");
 MODULE_DESCRIPTION("ALSA driver for MARIAN PCIe soundcards");
-MODULE_LICENSE("Proprietary");
+MODULE_LICENSE("GPL v2");
 
 __maybe_unused static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX;
 __maybe_unused static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;
