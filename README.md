@@ -18,6 +18,12 @@ The driver has been developed and tested on following systems:
 Since no funny magic is used it should easily work on other systems
 that support ALSA.
 
+## Supported Devices
+* MARIAN Clara E, Rev.06
+
+Always make sure to have the corresponding firmware installed on the card
+by checking the PCI revision.
+
 ## Building the driver
 This is no detailed instruction on to how make your system fit for building
 kernel drivers but to give a pointer in the right direction, on Debian based
