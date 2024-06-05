@@ -32,10 +32,12 @@
 #define MASK_IRQ_DISABLE_PLAYBACK (1<<1)
 #define MASK_IRQ_DISABLE_CAPTURE (1<<2)
 #define MASK_IRQ_DMA_LOOPBACK (1<<3)
+#define MASK_IRQ_SKIP_PREPARE (1<<4)
 #define MASK_STATUS_IDLE (1<<4)
 #define MASK_IRQ_STATUS_CAPTURE (1<<11)
 #define MASK_STATUS_CAPTURE_PAGE (1<<12)
 #define MASK_IRQ_STATUS_PREPARED (1<<14)
+#define MASK_IRQ_STATUS_PLAYBACK (1<<8)
 #define ADDR_NUM_SLICES_REG 0xB0
 #define ADDR_BASE_PLAYBACK_HOST_ADDR_REGS 0x200
 #define ADDR_BASE_CAPTURE_HOST_ADDR_REGS 0x300
@@ -43,7 +45,6 @@
 #define ADDR_XILINX_C2H_REG 0x1004
 #define ADDR_XILINX_IRQ_ENABLE_REG 0x2004
 // to make things not too complicated, we fix the number of channels per slice
-#define CHANNELS_PER_SLICE 512
 #define NUM_CHANNEL_ENABLE_REGS 16
 
 static int enable_interrupts(struct generic_chip *chip)
@@ -54,11 +55,8 @@ static int enable_interrupts(struct generic_chip *chip)
 	write_reg32_bar1(chip, ADDR_XILINX_IRQ_ENABLE_REG, 1);
 	// enable capture interrupts (besides the prepare IRQ the only one
 	// we are interested in)
-	// since at the moment we have no shadow registers, we need to
-	// take care of the DMA loopback as well which is located in the
-	// same register
-	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG,
-		0xFFFFFFFF & ~(MASK_IRQ_DMA_LOOPBACK | MASK_IRQ_DISABLE_CAPTURE));
+	// DMA loopback and preload skipping stay disabled (bits == 0)
+	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG, MASK_IRQ_DISABLE_PLAYBACK);
 	return 0;
 }
 
@@ -99,9 +97,9 @@ static int reset_engine(struct generic_chip *chip)
 }
 
 int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
-	bool playback, u64 host_base_addr, unsigned int num_blocks)
+	bool playback, u64 host_base_addr, unsigned int num_blocks,
+	unsigned int channels_per_dma_slice)
 {
-
 	u32 channel_enables[NUM_CHANNEL_ENABLE_REGS] = {0};
 	int i = 0;
 
@@ -109,6 +107,14 @@ int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 	if (chip->dma_status != DMA_STATUS_RUNNING)
 		if (reset_engine(chip) < 0)
 			return -EIO;
+
+	// TODO ToG: for now we work with the channels per slice being
+	// fixed the max. number of channels the card can handle
+	if (channels > channels_per_dma_slice) {
+		PRINT_ERROR("dma_ng_prepare: channels > channels_per_dma_slice\n");
+		// if the card is configured correctly, this should never happen
+		return -EINVAL;
+	}
 
 	for (i = 0; i < channels; i++) {
 		channel_enables[i / 32] |= (1 << (i % 32));
@@ -120,7 +126,7 @@ int dma_ng_prepare(struct generic_chip *chip, unsigned int channels,
 			i * REG_ADDR_INCREASE, channel_enables[i]);
 	}
 	write_reg32_bar0(chip, ADDR_NUM_BLOCKS_REG, num_blocks);
-	write_reg32_bar0(chip, ADDR_NUM_SLICES_REG, CHANNELS_PER_SLICE);
+	write_reg32_bar0(chip, ADDR_NUM_SLICES_REG, channels_per_dma_slice);
 	if (playback) {
 		write_reg32_bar0(chip,
 			ADDR_BASE_PLAYBACK_HOST_ADDR_REGS,

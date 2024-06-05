@@ -16,8 +16,10 @@
  */
 
 #include <linux/pci.h>
+#include <sound/pcm.h>
 #include "dbg_out.h"
 #include "device_generic.h"
+#include "dma_ng.h"
 #include "clara.h"
 
 #define FPGA_MAGIC_WORD 0xAD10F96A
@@ -25,6 +27,10 @@
 
 static int acquire_pci_resources(struct generic_chip *chip);
 static void release_pci_resources(struct generic_chip *chip);
+
+/*
+	CHIP MANAGEMENT FUNCTIONS
+*/
 
 static void chip_free(struct generic_chip *chip)
 {
@@ -121,6 +127,10 @@ static void release_pci_resources(struct generic_chip *chip)
 	PRINT_DEBUG("BAR1: iounmap success\n");
 }
 
+/*
+	HARDWARE SPECIFIC FUNCTIONS
+*/
+
 bool clara_detect_hw_presence(struct generic_chip *chip)
 {
 	u32 val = read_reg32_bar0(chip, ADDR_MAGIC_WORD_REG);
@@ -138,7 +148,7 @@ void clara_soft_reset(struct generic_chip *chip)
 	// TODO ToG: reset IRQs / DMA engine
 }
 
-int clara_alloc_dma_buffers(struct pci_dev *pci_dev,
+static int alloc_dma_buffers(struct pci_dev *pci_dev,
 	struct generic_chip *chip,
 	size_t playback_size, size_t capture_size)
 {
@@ -168,7 +178,28 @@ int clara_alloc_dma_buffers(struct pci_dev *pci_dev,
 	return 0;
 }
 
+int clara_alloc_dma_buffers(struct pci_dev *pci_dev,
+	struct generic_chip *chip)
+{
+	struct clara_chip *clara_chip = chip->specific;
+	return alloc_dma_buffers(pci_dev, chip,
+		DMA_BLOCK_SIZE_BYTES * clara_chip->max_num_dma_blocks *
+			chip->max_num_channels,
+		DMA_BLOCK_SIZE_BYTES * clara_chip->max_num_dma_blocks *
+			chip->max_num_channels);
+}
+
 void clara_timer_callback(struct generic_chip *chip)
 {
 	generic_timer_callback(chip);
+}
+
+/*
+	PCM FUNCTIONS
+*/
+
+snd_pcm_uframes_t clara_pcm_pointer(struct snd_pcm_substream *substream)
+{
+	struct generic_chip *chip = snd_pcm_substream_chip(substream);
+	return generic_get_sample_counter(chip);
 }

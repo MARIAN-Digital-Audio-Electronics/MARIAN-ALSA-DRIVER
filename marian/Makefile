@@ -14,5 +14,5 @@
 # http://www.gnu.org/licenses/gpl-2.0.html
 
 snd-marian-objs := marian.o device_abstraction.o device_generic.o clara.o \
-	clara_e.o dma_ng.o
+	clara_e.o clara_emin.o dma_ng.o
 obj-m += snd-marian.o

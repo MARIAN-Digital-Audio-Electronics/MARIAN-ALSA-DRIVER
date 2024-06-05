@@ -28,17 +28,10 @@
 #include "clara_e.h"
 #include "dma_ng.h"
 
-#define MIN_NUM_CHANNELS 1 // Clara E
-#define MAX_NUM_CHANNELS 512 // Clara E
-#define MAX_NUM_BLOCKS 128 // Clara E
-#define DMA_BLOCK_SIZE_BYTES (DMA_SAMPLES_PER_BLOCK*sizeof(u32))
 #define TIMER_INTERVAL_MS 1000
 #define ADDR_CLOCK_MODE_READ_REG 0x80
 #define MASK_CLOCK_MODE 0x3
 
-struct clara_e_chip {
-	u32 _dummy;
-};
 static struct snd_pcm_ops const playback_ops;
 static struct snd_pcm_ops const capture_ops;
 static void timer_callback(struct generic_chip *chip);
@@ -61,7 +54,11 @@ static void get_hw_revision_range(struct valid_hw_revision_range *range)
 	range->max = CLARA_E_MAX_HW_REVISION;
 }
 
-static void chip_free(struct generic_chip *chip)
+/*
+	CHIP MANAGEMENT FUNCTIONS
+*/
+
+void clara_e_chip_free(struct generic_chip *chip)
 {
 	struct clara_chip *clara_chip = chip->specific;
 	struct clara_e_chip *clara_e_chip = clara_chip->specific;
@@ -75,6 +72,15 @@ static void chip_free(struct generic_chip *chip)
 	clara_chip->specific_free = NULL;
 }
 
+// TODO ToG: the max period size does not only depend on the clock mode but
+// also the actual number of used channels.
+static const unsigned int period_sizes_cm48[] =	{ 16, 32, 48, 64, 96, 128, 192,
+	256, 384, 512, 768, 1024};
+static const unsigned int period_sizes_cm96[] = { 16, 32, 48, 64, 96, 128, 192,
+	256, 384, 512, 768, 1024, 2048};
+static const unsigned int period_sizes_cm192[] = { 16, 32, 48, 64, 96, 128, 192,
+	256, 384, 512, 768, 1024, 1536, 2048, 4096};
+
 static int chip_new(struct snd_card *card,
 	struct pci_dev *pci_dev,
 	struct generic_chip **rchip)
@@ -84,18 +90,73 @@ static int chip_new(struct snd_card *card,
 	struct clara_chip *clara_chip = NULL;
 	struct clara_e_chip *clara_e_chip = NULL;
 
+	static const struct snd_pcm_hw_constraint_list 
+		hw_constraints_period_sizes[CLOCK_MODE_CNT] = {
+			{	.count = ARRAY_SIZE(period_sizes_cm48),
+				.list = period_sizes_cm48,
+				.mask = 0},
+			{	.count = ARRAY_SIZE(period_sizes_cm96),
+				.list = period_sizes_cm96,
+				.mask = 0},
+			{	.count = ARRAY_SIZE(period_sizes_cm192),
+				.list = period_sizes_cm192,
+				.mask = 0},
+			{	.count = 0,
+				.list = NULL,
+				.mask = 0},
+		};
+	static const u16 max_channels[CLOCK_MODE_CNT] = {512, 256, 128, 0};
+
 	err = clara_chip_new(card, pci_dev, &chip);
 	if (err < 0)
 		return err;
+	clara_chip = chip->specific;
 
 	clara_e_chip = kzalloc(sizeof(*clara_e_chip), GFP_KERNEL);
 	if (clara_e_chip == NULL)
 		return -ENOMEM;
-	clara_e_chip->_dummy = 0x5CA1AB1E;
+	// clara e specific constraints
+	{
+		int i = 0;
+		for (i = 0; i < CLOCK_MODE_CNT; i++) {
+			clara_e_chip->hw_constraints_period_sizes[i] =
+				hw_constraints_period_sizes[i];
+			clara_e_chip->max_channels[i] = max_channels[i];
+		}
+	}
+	chip->min_num_channels = 1;
+	chip->max_num_channels = 512;
+	clara_chip->max_num_dma_blocks = 128;
+	clara_chip->channels_per_dma_slice = 512;
+	// caps are the same for playback and capture
+	chip->hw_caps_playback = (struct snd_pcm_hardware const) {
+		.info = (SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_NONINTERLEAVED |
+			SNDRV_PCM_INFO_JOINT_DUPLEX |
+			SNDRV_PCM_INFO_SYNC_START |
+			SNDRV_PCM_INFO_BLOCK_TRANSFER),
+		.formats = SNDRV_PCM_FMTBIT_S24_3LE, //SNDRV_PCM_FMTBIT_S32_LE,
+		.rates = (SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 |
+			SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000 |
+			SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_192000),
+		.rate_min = 44100,
+		.rate_max = 192000,
+		.channels_min = chip->min_num_channels,
+		.channels_max = chip->max_num_channels,
+		.buffer_bytes_max = DMA_BLOCK_SIZE_BYTES *
+			clara_chip->max_num_dma_blocks *
+			DMA_NUM_PERIODS * chip->max_num_channels,
+		.period_bytes_min = DMA_BLOCK_SIZE_BYTES *
+			chip->min_num_channels,
+		.period_bytes_max = DMA_BLOCK_SIZE_BYTES *
+			clara_chip->max_num_dma_blocks *
+			chip->max_num_channels,
+		.periods_min = DMA_NUM_PERIODS,
+		.periods_max = DMA_NUM_PERIODS,
+		.fifo_size = 0,
+	};
 
-	clara_chip = chip->specific;
 	clara_chip->specific = clara_e_chip;
-	clara_chip->specific_free = chip_free;
+	clara_chip->specific_free = clara_e_chip_free;
 
 	*rchip = chip;
 	return 0;
@@ -105,14 +166,6 @@ static int chip_new(struct snd_card *card,
 	// error:
 	// kfree(clara_e_chip);
 	// return err;
-}
-
-static int alloc_dma_buffers(struct pci_dev *pci_dev,
-	struct generic_chip *chip)
-{
-	return clara_alloc_dma_buffers(pci_dev, chip,
-		DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * MAX_NUM_CHANNELS,
-		DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS * MAX_NUM_CHANNELS);
 }
 
 void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
@@ -127,7 +180,7 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->detect_hw_presence = clara_detect_hw_presence;
 	dev_specifics->soft_reset = clara_soft_reset;
 	dev_specifics->indicate_state = generic_indicate_state;
-	dev_specifics->alloc_dma_buffers = alloc_dma_buffers;
+	dev_specifics->alloc_dma_buffers = clara_alloc_dma_buffers;
 	dev_specifics->irq_handler = dma_ng_irq_handler;
 	dev_specifics->pcm_playback_ops = &playback_ops;
 	dev_specifics->pcm_capture_ops = &capture_ops;
@@ -136,70 +189,36 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->create_controls = create_controls;
 }
 
-// capabilities are the same for playback and capture on Clara E
-struct snd_pcm_hardware const hw_caps = {
-	.info = (SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_NONINTERLEAVED |
-		SNDRV_PCM_INFO_JOINT_DUPLEX | SNDRV_PCM_INFO_SYNC_START |
-		SNDRV_PCM_INFO_BLOCK_TRANSFER),
-	.formats = SNDRV_PCM_FMTBIT_S24_3LE, //SNDRV_PCM_FMTBIT_S32_LE,
-	.rates = (SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 |
-		SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000 |
-		SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_192000),
-	.rate_min = 44100,
-	.rate_max = 192000,
-	.channels_min = MIN_NUM_CHANNELS,
-	.channels_max = MAX_NUM_CHANNELS,
-	.buffer_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS *
-		DMA_NUM_PERIODS * MAX_NUM_CHANNELS,
-	.period_bytes_min = DMA_BLOCK_SIZE_BYTES * MIN_NUM_CHANNELS,
-	.period_bytes_max = DMA_BLOCK_SIZE_BYTES * MAX_NUM_BLOCKS *
-		MAX_NUM_CHANNELS,
-	.periods_min = DMA_NUM_PERIODS,
-	.periods_max = DMA_NUM_PERIODS,
-	.fifo_size = 0,
-};
+/*
+	PCM FUNCTIONS
+*/
 
-// TODO ToG: the max period size does not only depend on the clock mode but
-// also the actual number of used channels.
-static const unsigned int period_sizes_cm48[] =	{ 16, 32, 48, 64, 96, 128, 192,
-	256, 384, 512, 768, 1024};
-static const unsigned int period_sizes_cm96[] = { 16, 32, 48, 64, 96, 128, 192,
-	256, 384, 512, 768, 1024, 2048};
-static const unsigned int period_sizes_cm192[] = { 16, 32, 48, 64, 96, 128, 192,
-	256, 384, 512, 768, 1024, 1536, 2048, 4096};
-
-static const struct snd_pcm_hw_constraint_list hw_constraints_period_sizes[] = {
-	{	.count = ARRAY_SIZE(period_sizes_cm48),
-		.list = period_sizes_cm48,
-		.mask = 0},
-	{	.count = ARRAY_SIZE(period_sizes_cm96),
-		.list = period_sizes_cm96,
-		.mask = 0},
-	{	.count = ARRAY_SIZE(period_sizes_cm192),
-		.list = period_sizes_cm192,
-		.mask = 0},
-};
-
-static const u16 max_channels[] = {512, 256, 128};
-
-static int pcm_open(struct snd_pcm_substream *substream)
+int clara_e_pcm_open(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
+	struct clara_chip *clara_chip = chip->specific;
+	struct clara_e_chip *clara_e_chip = clara_chip->specific;
 	unsigned int const current_rate =
 		atomic_read(&chip->current_sample_rate);
 	enum clock_mode const cmode =
 		generic_sample_rate_to_clock_mode(current_rate);
+	if (cmode > CLOCK_MODE_192) {
+		PRINT_ERROR("pcm_open: invalid clock mode: %d\n", cmode);
+		return -EINVAL;
+	}
 	snd_pcm_set_sync(substream);
 	snd_pcm_hw_constraint_list(substream->runtime, 0,
 		SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
-		&hw_constraints_period_sizes[cmode]);
-	substream->runtime->hw = hw_caps;
+		&(clara_e_chip->hw_constraints_period_sizes[cmode]));
+	// caps are the same for playback and capture
+	substream->runtime->hw = chip->hw_caps_playback;
 
 	// since Dante is the clock master, the sample rate is fixed
 	substream->runtime->hw.rate_min = current_rate;
 	substream->runtime->hw.rate_max = current_rate;
 	// overwrite clock mode dependant values
-	substream->runtime->hw.channels_max = max_channels[cmode];
+	substream->runtime->hw.channels_max =
+		clara_e_chip->max_channels[cmode];
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		PRINT_DEBUG("pcm_playback_open\n");
@@ -219,14 +238,14 @@ static int pcm_open(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int pcm_close(struct snd_pcm_substream *substream)
+int clara_e_pcm_close(struct snd_pcm_substream *substream)
 {
 	PRINT_DEBUG("pcm_close\n");
 	snd_pcm_set_runtime_buffer(substream, NULL);
 	return 0;
 }
 
-static int pcm_hw_params(struct snd_pcm_substream *substream,
+int clara_e_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *hw_params)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
@@ -280,7 +299,7 @@ static int pcm_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int pcm_hw_free(struct snd_pcm_substream *substream)
+int clara_e_pcm_hw_free(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 
@@ -299,9 +318,10 @@ static int pcm_hw_free(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int pcm_prepare(struct snd_pcm_substream *substream)
+int clara_e_pcm_prepare(struct snd_pcm_substream *substream)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
+	struct clara_chip *clara_chip = chip->specific;
 	u64 base_addr = substream->runtime->dma_addr;
 	unsigned int channels = substream->runtime->channels;
 	unsigned int no_blocks = 0;
@@ -330,13 +350,13 @@ static int pcm_prepare(struct snd_pcm_substream *substream)
 	}
 	err = dma_ng_prepare(chip, channels,
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK),
-		base_addr, no_blocks);
+		base_addr, no_blocks, clara_chip->channels_per_dma_slice);
 	spin_unlock_irq(&chip->lock);
 	PRINT_DEBUG("pcm_prepare: no_blocks: %d\n", no_blocks);
 	return err;
 }
 
-static int pcm_ioctl(struct snd_pcm_substream *substream,
+int clara_e_pcm_ioctl(struct snd_pcm_substream *substream,
 	unsigned int cmd, void *arg)
 {
 	switch (cmd) {
@@ -350,7 +370,7 @@ static int pcm_ioctl(struct snd_pcm_substream *substream,
 	return generic_pcm_ioctl(substream, cmd, arg);
 }
 
-static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
+int clara_e_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	switch (cmd) {
@@ -390,32 +410,26 @@ static int pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	return 0;
 }
 
-static snd_pcm_uframes_t pcm_pointer(struct snd_pcm_substream *substream)
-{
-	struct generic_chip *chip = snd_pcm_substream_chip(substream);
-	return generic_get_sample_counter(chip);
-}
-
 static struct snd_pcm_ops const playback_ops = {
-	.open = pcm_open,
-	.close = pcm_close,
-	.ioctl = pcm_ioctl,
-	.hw_params = pcm_hw_params,
-	.hw_free = pcm_hw_free,
-	.prepare = pcm_prepare,
-	.trigger = pcm_trigger,
-	.pointer = pcm_pointer,
+	.open = clara_e_pcm_open,
+	.close = clara_e_pcm_close,
+	.ioctl = clara_e_pcm_ioctl,
+	.hw_params = clara_e_pcm_hw_params,
+	.hw_free = clara_e_pcm_hw_free,
+	.prepare = clara_e_pcm_prepare,
+	.trigger = clara_e_pcm_trigger,
+	.pointer = clara_pcm_pointer,
 };
 
 static struct snd_pcm_ops const capture_ops = {
-	.open = pcm_open,
-	.close = pcm_close,
-	.ioctl = pcm_ioctl,
-	.hw_params = pcm_hw_params,
-	.hw_free = pcm_hw_free,
-	.prepare = pcm_prepare,
-	.trigger = pcm_trigger,
-	.pointer = pcm_pointer,
+	.open = clara_e_pcm_open,
+	.close = clara_e_pcm_close,
+	.ioctl = clara_e_pcm_ioctl,
+	.hw_params = clara_e_pcm_hw_params,
+	.hw_free = clara_e_pcm_hw_free,
+	.prepare = clara_e_pcm_prepare,
+	.trigger = clara_e_pcm_trigger,
+	.pointer = clara_pcm_pointer,
 };
 
 static int create_controls(struct generic_chip *chip)
@@ -434,7 +448,7 @@ static int create_controls(struct generic_chip *chip)
 
 // One might wonder why this is not in the generic part. Well the Dante card
 // is the only one to set the clock only from the Dante side (yet).
-static enum clock_mode get_clock_mode(struct generic_chip *chip)
+enum clock_mode clara_e_get_clock_mode(struct generic_chip *chip)
 {
 	u32 reg = read_reg32_bar0(chip, ADDR_CLOCK_MODE_READ_REG);
 	enum clock_mode cmode = CLOCK_MODE_48;
@@ -460,5 +474,5 @@ static void timer_callback(struct generic_chip *chip)
 {
 	clara_timer_callback(chip);
 	// update the clock mode
-	atomic_set(&chip->clock_mode, get_clock_mode(chip));
+	atomic_set(&chip->clock_mode, clara_e_get_clock_mode(chip));
 }

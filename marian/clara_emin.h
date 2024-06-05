@@ -15,18 +15,18 @@
  * http://www.gnu.org/licenses/gpl-2.0.html
  */
 
-#ifndef MARIAN_VERSION_H
-#define MARIAN_VERSION_H
+#ifndef MARIAN_CLARA_EMIN_H
+#define MARIAN_CLARA_EMIN_H
 
-#define  MARIAN_VERSION_MAJOR 1
-#define  MARIAN_VERSION_MINOR 1
-#define  MARIAN_VERSION_PATCH 0
+#define CLARA_EMIN_DEVICE_ID 0x9820
 
-#define __STRINGIFY(x) #x
-#define __STRINGIFY__(x) __STRINGIFY(x)
-#define MARIAN_DRIVER_VERSION_STRING \
-    __STRINGIFY__(MARIAN_VERSION_MAJOR) "." \
-    __STRINGIFY__(MARIAN_VERSION_MINOR) "." \
-    __STRINGIFY__(MARIAN_VERSION_PATCH)
+// revisions this driver is able to handle
+#define CLARA_EMIN_MIN_HW_REVISION 0x01
+#define CLARA_EMIN_MAX_HW_REVISION 0x02
 
-#endif // MARIAN_VERSION_H
+#define CLARA_EMIN_CARD_NAME "ClaraEmin"
+
+void clara_emin_register_device_specifics(struct device_specifics
+	*dev_specifics);
+
+#endif
