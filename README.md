@@ -19,8 +19,8 @@ Since no funny magic is used it should easily work on other systems
 that support ALSA.
 
 ## Supported Devices
-* MARIAN Clara E, Rev.06
-* MARIAN Clara Emin, Rev.01
+* MARIAN Clara E, Rev.06-07
+* MARIAN Clara Emin, Rev.01-02
 
 Always make sure to have the corresponding firmware installed on the card
 by checking the PCI revision.
