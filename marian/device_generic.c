@@ -266,8 +266,10 @@ enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate)
 		return CLOCK_MODE_48;
 	else if (sample_rate <= 100000)
 		return CLOCK_MODE_96;
-	else
+	else if (sample_rate <= 200000)
 		return CLOCK_MODE_192;
+	else
+		return CLOCK_MODE_384;
 }
 
 static unsigned int standard_wordclocks_hz[] = {22050, 32000, 44100, 48000,

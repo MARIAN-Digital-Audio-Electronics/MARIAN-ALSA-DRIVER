@@ -15,6 +15,7 @@
  * http://www.gnu.org/licenses/gpl-2.0.html
  */
 
+#include <linux/types.h>
 #include <linux/pci.h>
 #include <sound/core.h>
 #include "device_generic.h"
@@ -22,6 +23,8 @@
 struct clara_chip {
 	unsigned long bar1_addr;
 	void __iomem *bar1;
+	u16 max_num_dma_blocks;
+	u16 channels_per_dma_slice;
 	void *specific;
 	chip_free_func specific_free;
 };
@@ -35,10 +38,10 @@ int clara_chip_new(struct snd_card *card,
 	struct pci_dev *pci_dev,
 	struct generic_chip **rchip);
 int clara_alloc_dma_buffers(struct pci_dev *pci_dev,
-	struct generic_chip *chip,
-	size_t playback_size, size_t capture_size);
+	struct generic_chip *chip);
 bool clara_detect_hw_presence(struct generic_chip *chip);
 /* Resets all relevant registers to default values mainly
  * to avoid spurious interrupts. */
 void clara_soft_reset(struct generic_chip *chip);
 void clara_timer_callback(struct generic_chip *chip);
+snd_pcm_uframes_t clara_pcm_pointer(struct snd_pcm_substream *substream);
