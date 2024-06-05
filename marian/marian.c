@@ -102,6 +102,10 @@ static int driver_probe(struct pci_dev *pci_dev,
 		clara_e_register_device_specifics(&dev_specifics);
 		break;
 
+	case CLARA_EMIN_DEVICE_ID:
+		clara_emin_register_device_specifics(&dev_specifics);
+		break;
+
 	default:
 		return -ENODEV;
 	}
@@ -255,6 +259,7 @@ static void driver_remove(struct pci_dev *pci)
 
 static struct pci_device_id pci_ids[] = {
 	{ PCI_DEVICE(MARIAN_VENDOR_ID, CLARA_E_DEVICE_ID) },
+	{ PCI_DEVICE(MARIAN_VENDOR_ID, CLARA_EMIN_DEVICE_ID) },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, pci_ids);
