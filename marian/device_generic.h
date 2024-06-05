@@ -18,6 +18,7 @@
 #ifndef MARIAN_GENERIC_H
 #define MARIAN_GENERIC_H
 
+#include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/atomic.h>
 #include <sound/core.h>
@@ -41,6 +42,8 @@ enum clock_mode {
 	CLOCK_MODE_48 = 0,
 	CLOCK_MODE_96 = 1,
 	CLOCK_MODE_192 = 2,
+	CLOCK_MODE_384 = 3,
+	CLOCK_MODE_CNT = CLOCK_MODE_384 + 1,
 };
 extern char *clock_mode_names[];
 typedef void (*timer_callback_func)(struct generic_chip *chip);
@@ -71,6 +74,10 @@ struct generic_chip {
 	unsigned long timer_interval_ms;
 	atomic_t current_sample_rate;
 	atomic_t clock_mode;
+	u16 min_num_channels; // each direction
+	u16 max_num_channels; // each direction
+	struct snd_pcm_hardware hw_caps_playback;
+	struct snd_pcm_hardware hw_caps_capture;
 	// we want to store this control id to notify the user space of
 	// sample rate changes
 	atomic_t ctl_id_sample_rate;
