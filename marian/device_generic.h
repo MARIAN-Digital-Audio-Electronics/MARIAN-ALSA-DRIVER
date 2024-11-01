@@ -23,6 +23,7 @@
 #include <linux/atomic.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
+#include <sound/control.h>
 
 #define write_reg32_bar0(chip, reg, val) \
 	iowrite32((val), (chip)->bar0 + (reg))
@@ -30,6 +31,15 @@
 	ioread32((chip)->bar0 + (reg))
 #define HIGH_ADDR(x) (sizeof (x) > 4 ? (x) >> 32 & 0xffffffff : 0)
 #define LOW_ADDR(x) ((x) & 0xffffffff)
+#define LOCK_ACQUIRE(__lock__, __flags__) { \
+		PRINT_DEBUG("TRY LOCK"); \
+		spin_lock_irqsave(__lock__, __flags__); \
+		PRINT_DEBUG("GOT LOCK"); \
+	}
+#define LOCK_RELEASE(__lock__, __flags__) { \
+		spin_unlock_irqrestore(__lock__, __flags__); \
+		PRINT_DEBUG("LOCK RELEASED"); \
+	}
 
 struct generic_chip;
 enum dma_status {
@@ -111,5 +121,7 @@ unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
 int generic_read_wordclock_control_create(struct generic_chip *chip,
 	char *label, unsigned int idx, unsigned int *rcontrol_id);
 void generic_clear_dma_buffer(struct snd_dma_buffer *buf);
+int generic_control_create(struct generic_chip *chip,
+	struct snd_kcontrol_new *c_new, unsigned int *rcontrol_id);
 
 #endif
