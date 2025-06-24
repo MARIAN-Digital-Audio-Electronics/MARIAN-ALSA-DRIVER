@@ -81,6 +81,7 @@ int generic_chip_new(struct snd_card *card,
 	chip->num_buffer_frames = 0;
 	chip->timer_thread = NULL;
 	chip->timer_callback = NULL;
+	chip->measure_wordclock_hz = NULL;
 	chip->timer_interval_ms = 0;
 	chip->specific = NULL;
 	chip->specific_free = NULL;
@@ -203,11 +204,10 @@ int generic_dma_channel_offset(struct snd_pcm_substream *substream,
 {
 	struct generic_chip *chip = snd_pcm_substream_chip(substream);
 	unsigned int channel = info->channel;
-	info->offset = 0;
-	info->step = 32;
 	switch (alignment) {
-	case SNDRV_PCM_FMTBIT_S24_3LE: // fall through
 	case SNDRV_PCM_FMTBIT_S32_LE:
+		info->offset = 0;
+		info->step = 32;
 		info->first = channel * chip->num_buffer_frames *
 			sizeof(u32) * 8;
 		break;
@@ -275,7 +275,7 @@ enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate)
 static unsigned int standard_wordclocks_hz[] = {22050, 32000, 44100, 48000,
 	64000, 88200, 96000, 128000, 176400, 192000, 256000, 352800, 384000,};
 
-static unsigned int snap_to_standard_wc_hz(unsigned int freq_hz)
+unsigned int generic_snap_to_standard_wc_hz(unsigned int freq_hz)
 {
 	unsigned int i;
 	unsigned int standard_freq_hz;
@@ -308,7 +308,7 @@ unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
 	}
 	if (retries > 0) {
 		 freq_hz = (1280000000 / ((reg_val & MASK_WC_SCAN_RESULT)+1));
-		 return snap_to_standard_wc_hz(freq_hz);
+		 return generic_snap_to_standard_wc_hz(freq_hz);
 	}
 	return 0;
 }
@@ -316,22 +316,22 @@ unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
 void generic_timer_callback(struct generic_chip *chip)
 {
 	/// updating some measurements
-	unsigned int new_rate = generic_measure_wordclock_hz(chip, 0);
+	// NOTE: all yet implemented cards currently return the current
+	// sample rate on source 0
+	unsigned int new_rate = chip->measure_wordclock_hz(chip, 0);
 	unsigned int old_rate = atomic_read(&chip->current_sample_rate);
 	// when the sample rate changes, notify the user space
 	if (new_rate != old_rate) {
 		struct snd_kcontrol *kctl = snd_ctl_find_numid(chip->card,
 			(unsigned int)atomic_read(&chip->ctl_id_sample_rate));
-		atomic_set(&chip->current_sample_rate,
-			generic_measure_wordclock_hz(chip, 0));
+		atomic_set(&chip->current_sample_rate, new_rate);
 		if (kctl != NULL) {
 			snd_ctl_notify(chip->card, SNDRV_CTL_EVENT_MASK_VALUE,
 				&kctl->id);
 			PRINT_DEBUG("timer_callback: "
 				"notified sample rate change\n");
 		}
-		PRINT_INFO("timer_callback: new sample rate: %d\n",
-			new_rate);
+		PRINT_INFO("timer_callback: new sample rate: %d\n", new_rate);
 
 	}
 }

@@ -190,6 +190,10 @@ static int driver_probe(struct pci_dev *pci_dev,
 			dev_specifics.pcm_capture_ops);
 	}
 
+	// map wordclock measurement function
+	// make sure this is done before setting up the timer callback!
+	chip->measure_wordclock_hz = dev_specifics.measure_wordclock_hz;
+
 	// setup timer thread
 	chip->timer_interval_ms = dev_specifics.timer_interval_ms;
 	chip->timer_callback = dev_specifics.timer_callback;

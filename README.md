@@ -15,13 +15,17 @@ The driver has been developed and tested on following systems:
 Since no funny magic is used it should easily work on other systems that support ALSA.
 
 ## Supported Devices
-* MARIAN Clara E, Rev.06-07
-* MARIAN Clara Emin, Rev.01-02
+* MARIAN Clara E, Rev.09
+* MARIAN Clara Emin, Rev.04
 
 Always make sure to have the corresponding firmware installed on the card by checking the PCI revision.
 
+_NOTE: Although the driver technically works with Clara E Rev.08 and Clara Emin Rev.03, these revisions have been disabled as they are known to have a flawed Dante implementation. All users are encouraged to upgrade their cards to revision 09 and 04 respectively._
+
 ## History
- * Version 1.1.1: 
+ * Version 1.2.0:
+    - Moved from 24Bit LSB aligned to 32Bit transfer (Clara E, Clara Emin)
+ * Version 1.1.1:
     - Fixed locking issue
     - Preload skipping is enabled by default
  * Version 1.1.0: Added support for Clara Emin

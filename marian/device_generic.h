@@ -57,6 +57,7 @@ enum clock_mode {
 };
 extern char *clock_mode_names[];
 typedef void (*timer_callback_func)(struct generic_chip *chip);
+typedef unsigned int (*measure_wordclock_hz_func)(struct generic_chip *chip, unsigned int source);
 
 // ALSA specific free operation
 int generic_chip_dev_free(struct snd_device *device);
@@ -81,6 +82,7 @@ struct generic_chip {
 	struct snd_dma_buffer capture_buf;
 	struct task_struct *timer_thread;
 	timer_callback_func timer_callback;
+	measure_wordclock_hz_func measure_wordclock_hz;
 	unsigned long timer_interval_ms;
 	atomic_t current_sample_rate;
 	atomic_t clock_mode;
@@ -118,6 +120,7 @@ void generic_timer_callback(struct generic_chip *chip);
 enum clock_mode generic_sample_rate_to_clock_mode(unsigned int sample_rate);
 unsigned int generic_measure_wordclock_hz(struct generic_chip *chip,
 	unsigned int source);
+unsigned int generic_snap_to_standard_wc_hz(unsigned int freq_hz);
 int generic_read_wordclock_control_create(struct generic_chip *chip,
 	char *label, unsigned int idx, unsigned int *rcontrol_id);
 void generic_clear_dma_buffer(struct snd_dma_buffer *buf);
