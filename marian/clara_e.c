@@ -91,7 +91,7 @@ static int chip_new(struct snd_card *card,
 	struct clara_chip *clara_chip = NULL;
 	struct clara_e_chip *clara_e_chip = NULL;
 
-	static const struct snd_pcm_hw_constraint_list 
+	static const struct snd_pcm_hw_constraint_list
 		hw_constraints_period_sizes[CLOCK_MODE_CNT] = {
 			{	.count = ARRAY_SIZE(period_sizes_cm48),
 				.list = period_sizes_cm48,
@@ -135,7 +135,7 @@ static int chip_new(struct snd_card *card,
 			SNDRV_PCM_INFO_JOINT_DUPLEX |
 			SNDRV_PCM_INFO_SYNC_START |
 			SNDRV_PCM_INFO_BLOCK_TRANSFER),
-		.formats = SNDRV_PCM_FMTBIT_S24_3LE, //SNDRV_PCM_FMTBIT_S32_LE,
+		.formats = SNDRV_PCM_FMTBIT_S32_LE,
 		.rates = (SNDRV_PCM_RATE_44100 | SNDRV_PCM_RATE_48000 |
 			SNDRV_PCM_RATE_88200 | SNDRV_PCM_RATE_96000 |
 			SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_192000),
@@ -182,6 +182,7 @@ void clara_e_register_device_specifics(struct device_specifics *dev_specifics)
 	dev_specifics->soft_reset = clara_soft_reset;
 	dev_specifics->indicate_state = generic_indicate_state;
 	dev_specifics->alloc_dma_buffers = clara_alloc_dma_buffers;
+	dev_specifics->measure_wordclock_hz = generic_measure_wordclock_hz;
 	dev_specifics->irq_handler = dma_ng_irq_handler;
 	dev_specifics->pcm_playback_ops = &playback_ops;
 	dev_specifics->pcm_capture_ops = &capture_ops;
@@ -368,7 +369,7 @@ int clara_e_pcm_ioctl(struct snd_pcm_substream *substream,
 	switch (cmd) {
 	case SNDRV_PCM_IOCTL1_CHANNEL_INFO:
 		return generic_dma_channel_offset(substream, arg,
-			SNDRV_PCM_FMTBIT_S24_3LE);
+			SNDRV_PCM_FMTBIT_S32_LE);
 	default:
 		break;
 	}

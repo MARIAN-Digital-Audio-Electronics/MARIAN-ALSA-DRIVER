@@ -62,6 +62,7 @@ struct device_specifics {
 	soft_reset_func soft_reset;
 	indicate_state_func indicate_state;
 	alloc_dma_buffers_func alloc_dma_buffers;
+	measure_wordclock_hz_func measure_wordclock_hz;
 	irq_handler_t irq_handler;
 	struct snd_pcm_ops const *pcm_playback_ops;
 	struct snd_pcm_ops const *pcm_capture_ops;

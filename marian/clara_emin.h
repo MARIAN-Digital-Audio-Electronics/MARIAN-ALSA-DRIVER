@@ -21,8 +21,8 @@
 #define CLARA_EMIN_DEVICE_ID 0x9820
 
 // revisions this driver is able to handle
-#define CLARA_EMIN_MIN_HW_REVISION 0x01
-#define CLARA_EMIN_MAX_HW_REVISION 0x02
+#define CLARA_EMIN_MIN_HW_REVISION 0x04
+#define CLARA_EMIN_MAX_HW_REVISION 0x04
 
 #define CLARA_EMIN_CARD_NAME "ClaraEmin"
 
