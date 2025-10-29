@@ -30,11 +30,11 @@ PWD := $(shell pwd)
 
 default:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules \
-        EXTRA_CFLAGS="-DDBG_LEVEL=$(DBG_LEVEL)"
+        EXTRA_CFLAGS="-DDBG_LEVEL=$(DBG_LEVEL) -include $(PWD)/snd_printk_compat.h"
 
 install:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules_install \
-        EXTRA_CFLAGS="-DDBG_LEVEL=$(DBG_LEVEL)"
+        EXTRA_CFLAGS="-DDBG_LEVEL=$(DBG_LEVEL) -include $(PWD)/snd_printk_compat.h"
 
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
