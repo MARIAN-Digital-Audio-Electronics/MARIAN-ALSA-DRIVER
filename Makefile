@@ -15,6 +15,9 @@
 
 KERNEL_MODULE_NAME := marian/snd-marian
 
+# Disable module signing
+CONFIG_MODULE_SIG=n
+
 DBG_LVL_ERROR	:= 1
 DBG_LVL_WARN	:= 2
 DBG_LVL_INFO	:= 3
