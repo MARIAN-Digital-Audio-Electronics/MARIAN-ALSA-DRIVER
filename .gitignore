@@ -1,6 +1,15 @@
 snd-marian/.vs/
 snd-marian/.visualgdb/
-.vscode/settings.json
+.vscode/**
 driver.code-workspace
 snd-marian/*.sln
 snd-marian/*.vkrnlproj
+remove.sh
+hil/**
+*.o
+*.cmd
+*.ko
+*.mod
+*.mod.c
+modules.order
+Module.symvers

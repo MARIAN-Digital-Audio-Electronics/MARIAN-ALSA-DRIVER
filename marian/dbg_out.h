@@ -32,7 +32,7 @@
 	#if DBG_LEVEL >= DBG_LVL_ERROR
 		#define PRINT_ERROR(fmt, args...) \
 			do { \
-				snd_printk(KERN_ERR KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
+				pr_err(KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
 			} while (0)
 	#else
 		#define PRINT_ERROR(fmt, args...) do {} while (0)
@@ -41,7 +41,7 @@
 	#if DBG_LEVEL >= DBG_LVL_WARN
 		#define PRINT_WARN(fmt, args...) \
 			do { \
-				snd_printk(KERN_WARNING KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
+				pr_warning(KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
 			} while (0)
 	#else
 		#define PRINT_WARN(fmt, args...) do {} while (0)
@@ -50,7 +50,7 @@
 	#if DBG_LEVEL >= DBG_LVL_INFO
 		#define PRINT_INFO(fmt, args...) \
 			do { \
-				snd_printk(KERN_INFO KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
+				pr_info(KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
 			} while (0)
 	#else
 		#define PRINT_INFO(fmt, args...) do {} while (0)
@@ -60,7 +60,7 @@
 	#if DBG_LEVEL >= DBG_LVL_DEBUG
 		#define PRINT_DEBUG(fmt, args...) \
 			do { \
-				snd_printk(KERN_DEBUG KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
+				pr_debug(KBUILD_MODNAME ": [%s|%d] " fmt, __FILENAME__, __LINE__, ##args); \
 			} while (0)
 	#else
 		#define PRINT_DEBUG(fmt, args...) do {} while (0)

@@ -22,7 +22,7 @@
 
 // revisions this driver is able to handle
 #define CLARA_EMIN_MIN_HW_REVISION 0x04
-#define CLARA_EMIN_MAX_HW_REVISION 0x04
+#define CLARA_EMIN_MAX_HW_REVISION 0x05
 
 #define CLARA_EMIN_CARD_NAME "ClaraEmin"
 

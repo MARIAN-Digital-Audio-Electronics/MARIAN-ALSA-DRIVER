@@ -28,13 +28,18 @@ else
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
 
+EXTRA_CFLAGS=-DDBG_LEVEL=$(DBG_LEVEL)
+ifeq ($(DBG_LEVEL), $(DBG_LVL_DEBUG))
+EXTRA_CFLAGS+= -DDEBUG
+endif
+
 default:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules \
-        EXTRA_CFLAGS="-DDBG_LEVEL=$(DBG_LEVEL)"
+	EXTRA_CFLAGS="$(EXTRA_CFLAGS)"
 
 install:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules_install \
-        EXTRA_CFLAGS="-DDBG_LEVEL=$(DBG_LEVEL)"
+	EXTRA_CFLAGS="$(EXTRA_CFLAGS)"
 
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
