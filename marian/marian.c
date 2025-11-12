@@ -89,10 +89,10 @@ static int driver_probe(struct pci_dev *pci_dev,
 		return -ENOENT;
 	}
 
-	snd_printk(KERN_INFO "MARIAN driver probe: Driver version: %s\n",
+	PRINT_INFO("MARIAN driver probe: Driver version: %s\n",
 		MARIAN_DRIVER_VERSION_STRING);
-	snd_printk(KERN_INFO "MARIAN driver probe: Device id: 0x%4x, "
-		"revision: %02d\n", pci_id->device, pci_dev->revision);
+	PRINT_INFO("MARIAN driver probe: Device id: 0x%4X, "
+		"revision: %02X\n", pci_id->device, pci_dev->revision);
 
 	// cleanly initialize all specific function and descriptor pointers
 	clear_device_specifics(&dev_specifics);
@@ -111,7 +111,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 	}
 
 	if (!verify_device_specifics(&dev_specifics)) {
-		snd_printk(KERN_ERR "MARIAN driver probe: device specific "
+		PRINT_ERROR("MARIAN driver probe: device specific "
 			"descriptor not fully defined\n");
 		return -EFAULT;
 	}
@@ -119,9 +119,9 @@ static int driver_probe(struct pci_dev *pci_dev,
 	if (!dev_specifics.hw_revision_valid(pci_dev->revision)) {
 		struct valid_hw_revision_range range;
 		dev_specifics.get_hw_revision_range(&range);
-		snd_printk(KERN_ERR
+		PRINT_ERROR(
 			"MARIAN driver probe: device revision not supported.\n\t"
-			"supported revisions: %02d - %02d\n",
+			"supported revisions: %02X - %02X\n",
 			range.min, range.max);
 		return -ENODEV;
 	}
@@ -145,7 +145,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 	card->private_data = chip;
 
 	if (!dev_specifics.detect_hw_presence(chip)) {
-		snd_printk(KERN_ERR "MARIAN driver probe: device not present\n");
+		PRINT_ERROR("MARIAN driver probe: device not present\n");
 		err = -ENODEV;
 		goto error_free_chip;
 	}
@@ -153,10 +153,12 @@ static int driver_probe(struct pci_dev *pci_dev,
 	// prevent something funny happens when the irq handler is attached
 	dev_specifics.soft_reset(chip);
 
-	if (request_irq
-		(chip->pci_dev->irq, dev_specifics.irq_handler,
-		IRQF_SHARED, KBUILD_MODNAME, chip) < 0) {
-		snd_printk(KERN_ERR "request_irq error: %d\n", chip->pci_dev->irq);
+	if (request_irq(chip->pci_dev->irq,
+		dev_specifics.irq_handler,
+		chip->pci_dev->msi_enabled ? 0 : IRQF_SHARED,
+		KBUILD_MODNAME,
+		chip) < 0) {
+		PRINT_ERROR("request_irq error: %d\n", chip->pci_dev->irq);
 		err = -ENXIO;
 		goto error_free_chip;
 	}
@@ -170,7 +172,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 		goto error_free_card;
 
 	if (dev_specifics.alloc_dma_buffers(pci_dev, chip) < 0) {
-		snd_printk(KERN_ERR
+		PRINT_ERROR(
 			"failed to allocate DMA buffers\n");
 		err = -ENOMEM;
 		goto error_free_card;
@@ -200,7 +202,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 	chip->timer_thread = kthread_run(timer_thread_func,
 		(void *)chip, "MARIAN_timer_thread");
 	if (IS_ERR(chip->timer_thread)) {
-		snd_printk(KERN_ERR "could not create timer thread\n");
+		PRINT_ERROR("could not create timer thread\n");
 		err = -ENOMEM;
 		goto error_free_card;
 	}
@@ -215,7 +217,7 @@ static int driver_probe(struct pci_dev *pci_dev,
 	if (err < 0)
 		goto error_free_card;
 
-	snd_printk(KERN_INFO "MARIAN driver probe: Initialized module for %s\n",
+	PRINT_INFO("MARIAN driver probe: Initialized module for %s\n",
 		dev_specifics.card_name);
 	dev_specifics.indicate_state(chip, STATE_SUCCESS);
 	dev_idx++;
@@ -243,8 +245,8 @@ error_free_card:
 static void driver_remove(struct pci_dev *pci)
 {
 	struct snd_card *card = pci_get_drvdata(pci);
-	snd_printk(KERN_INFO
-		"MARIAN driver remove: Device id: 0x%4x, revision: %02d\n",
+	PRINT_INFO(
+		"MARIAN driver remove: Device id: 0x%4X, revision: %02X\n",
 		pci->device, pci->revision);
 	if (!card)
 		return;

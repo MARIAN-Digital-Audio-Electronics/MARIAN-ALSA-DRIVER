@@ -113,6 +113,7 @@ void generic_chip_free(struct generic_chip *chip)
 		chip->specific_free(chip);
 	if (chip->irq) {
 		free_irq(chip->irq, chip);
+		pci_disable_msi(chip->pci_dev);
 		chip->irq = -1;
 		PRINT_DEBUG("free_irq\n");
 	}
@@ -146,7 +147,14 @@ static int acquire_pci_resources(struct generic_chip *chip)
 		return -EINVAL;
 	}
 	pci_set_master(chip->pci_dev);
-	pci_disable_msi(chip->pci_dev);
+
+	if (!pci_enable_msi(chip->pci_dev)) {
+		PRINT_INFO("Using MSI");
+	}
+	else {
+		pci_disable_msi(chip->pci_dev);
+		PRINT_INFO("Falling back to legacy IRQ");
+	}
 
 	err = pci_request_regions(chip->pci_dev, chip->card->driver);
 	if (err < 0)

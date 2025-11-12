@@ -22,7 +22,7 @@
 
 // revisions this driver is able to handle
 #define CLARA_E_MIN_HW_REVISION 0x09
-#define CLARA_E_MAX_HW_REVISION 0x09
+#define CLARA_E_MAX_HW_REVISION 0x0B
 
 #define CLARA_E_CARD_NAME "ClaraE"
 
