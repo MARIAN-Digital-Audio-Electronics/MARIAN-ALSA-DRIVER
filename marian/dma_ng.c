@@ -68,6 +68,8 @@ int dma_ng_disable_interrupts(struct generic_chip *chip)
 	write_reg32_bar0(chip, ADDR_IRQ_DISABLE_REG,
 		MASK_IRQ_DISABLE_CAPTURE | MASK_IRQ_DISABLE_PLAYBACK);
 	// disable xilinx core interrupts and transport engine
+	if (chip->specific == NULL)
+		return -EINVAL;
 	write_reg32_bar1(chip, ADDR_XILINX_H2C_REG, 0);
 	write_reg32_bar1(chip, ADDR_XILINX_C2H_REG, 0);
 	write_reg32_bar1(chip, ADDR_XILINX_IRQ_ENABLE_REG, 0);
