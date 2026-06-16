@@ -17,12 +17,15 @@ The driver has been developed and tested on following systems:
 Since no funny magic is used it should easily work on other systems that support ALSA.
 
 ## Supported Devices
-* MARIAN Clara E, Rev.09-0B
-* MARIAN Clara Emin, Rev.04-05
+* MARIAN Clara E, Rev.09-0C
+* MARIAN Clara Emin, Rev.04-06
 
 Always make sure to have the corresponding firmware installed on the card by checking the PCI revision or looking it up in the Dante Controller.
 
 ## History
+* Version 1.3.1:
+    - Support for newer FPGA releases (fixing Dante redundancy issues)
+    - Fixed potential race condition when driver is removed
 * Version 1.3.0:
     - Implemented MSI support
     - Removed calls to deprecated snd_printk()
