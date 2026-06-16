@@ -22,12 +22,12 @@
 
 // revisions this driver is able to handle
 #define CLARA_E_MIN_HW_REVISION 0x09
-#define CLARA_E_MAX_HW_REVISION 0x0B
+#define CLARA_E_MAX_HW_REVISION 0x0C
 
 #define CLARA_E_CARD_NAME "ClaraE"
 
 struct clara_e_chip {
-	struct snd_pcm_hw_constraint_list 
+	struct snd_pcm_hw_constraint_list
 		hw_constraints_period_sizes[CLOCK_MODE_CNT];
 	u16 max_channels[CLOCK_MODE_CNT];
 };

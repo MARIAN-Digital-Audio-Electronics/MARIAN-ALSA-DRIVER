@@ -109,14 +109,14 @@ void generic_chip_free(struct generic_chip *chip)
 {
 	if (chip == NULL)
 		return;
-	if (chip->specific_free != NULL)
-		chip->specific_free(chip);
-	if (chip->irq) {
+	if (chip->irq >= 0) {
 		free_irq(chip->irq, chip);
 		pci_disable_msi(chip->pci_dev);
 		chip->irq = -1;
 		PRINT_DEBUG("free_irq\n");
 	}
+	if (chip->specific_free != NULL)
+		chip->specific_free(chip);
 	if (chip->playback_buf.area != NULL)
 		snd_dma_free_pages(&chip->playback_buf);
 	if (chip->capture_buf.area != NULL)
